@@ -32,6 +32,7 @@ PATH_QUEUE_MODULES = {
     7: "sharedleopaths.router1[6].ppp[1].queue",
     8: "sharedleopaths.router1[7].ppp[1].queue",
 }
+MSS_BYTES = 1448
 
 
 @dataclass
@@ -65,6 +66,10 @@ def sample_hold_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series
     if series is None or series.empty:
         return pd.Series(np.zeros_like(grid), index=grid)
     return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
+
+
+def bytes_to_packets(series: pd.Series) -> pd.Series:
+    return series / MSS_BYTES
 
 
 def conn_id(path: Path) -> int:
@@ -250,20 +255,21 @@ def save_jain_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path)
 
 
 def save_hol_blocked_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+    (out_dir / "hol_blocked_bytes_timeseries.pdf").unlink(missing_ok=True)
     fig, axes = plt.subplots(len(bundles), 1, figsize=(10, 6), sharex=True, sharey=True)
     axes = np.atleast_1d(axes)
     for ax, bundle in zip(axes, bundles):
         for user_label, _server_index, paths in USERS:
-            series = sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid) / 1024
+            series = bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid))
             ax.plot(grid, series, label=f"user {user_label} ({paths})")
         ax.set_title(bundle.label)
-        ax.set_ylabel("HoL blocked (KiB)")
+        ax.set_ylabel("HoL blocked (MSS packets)")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
     axes[-1].set_xlabel("Time (s)")
-    fig.suptitle("Receiver HoL-Blocked Bytes")
+    fig.suptitle("Receiver HoL-Blocked Data")
     fig.tight_layout()
-    fig.savefig(out_dir / "hol_blocked_bytes_timeseries.pdf")
+    fig.savefig(out_dir / "hol_blocked_packets_timeseries.pdf")
     plt.close(fig)
 
 
@@ -272,10 +278,10 @@ def save_dsn_gap_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Pa
     axes = np.atleast_1d(axes)
     for ax, bundle in zip(axes, bundles):
         for user_label, _server_index, paths in USERS:
-            series = sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid) / 1024
+            series = bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid))
             ax.plot(grid, series, label=f"user {user_label} ({paths})")
         ax.set_title(bundle.label)
-        ax.set_ylabel("DSN gap (KiB)")
+        ax.set_ylabel("DSN gap (MSS packets)")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
     axes[-1].set_xlabel("Time (s)")
@@ -294,12 +300,12 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
         for user_label, _server_index, _paths in USERS:
             mean_mbps = final_window_mean(resample_to_grid(bundle.user_goodput[user_label], grid) / 1e6, window_start)
             row[f"user_{user_label}_goodput_mbps"] = mean_mbps
-            row[f"user_{user_label}_hol_blocked_kib"] = final_window_mean(
-                sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid) / 1024,
+            row[f"user_{user_label}_hol_blocked_packets"] = final_window_mean(
+                bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid)),
                 window_start,
             )
-            row[f"user_{user_label}_dsn_gap_kib"] = final_window_mean(
-                sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid) / 1024,
+            row[f"user_{user_label}_dsn_gap_packets"] = final_window_mean(
+                bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid)),
                 window_start,
             )
             user_means.append(mean_mbps)
@@ -380,13 +386,13 @@ def save_aggregate_summary_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     fig.savefig(aggregate_dir / "fairness_and_goodput_summary.pdf")
     plt.close(fig)
 
-    hol_columns = [f"user_{user}_hol_blocked_kib" for user in ("A", "B", "C")]
-    dsn_columns = [f"user_{user}_dsn_gap_kib" for user in ("A", "B", "C")]
+    hol_columns = [f"user_{user}_hol_blocked_packets" for user in ("A", "B", "C")]
+    dsn_columns = [f"user_{user}_dsn_gap_packets" for user in ("A", "B", "C")]
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
     for offset, user_label, column in zip((-width, 0, width), ("A", "B", "C"), hol_columns):
         axes[0].bar(x + offset, summary[column], width, label=f"user {user_label}")
     axes[0].set_title("Final-Window HoL-Blocked Data")
-    axes[0].set_ylabel("KiB")
+    axes[0].set_ylabel("MSS packets")
     axes[0].set_xticks(x, labels, rotation=20, ha="right")
     axes[0].grid(True, axis="y", alpha=0.3)
     axes[0].legend(fontsize=8)
@@ -394,7 +400,7 @@ def save_aggregate_summary_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     for offset, user_label, column in zip((-width, 0, width), ("A", "B", "C"), dsn_columns):
         axes[1].bar(x + offset, summary[column], width, label=f"user {user_label}")
     axes[1].set_title("Final-Window DSN Gap")
-    axes[1].set_ylabel("KiB")
+    axes[1].set_ylabel("MSS packets")
     axes[1].set_xticks(x, labels, rotation=20, ha="right")
     axes[1].grid(True, axis="y", alpha=0.3)
     axes[1].legend(fontsize=8)

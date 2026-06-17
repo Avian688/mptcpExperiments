@@ -21,6 +21,7 @@ CONFIGS = [
 ]
 
 NETWORK = "schedulernegativetwopaths"
+MSS_BYTES = 1448
 
 
 @dataclass
@@ -159,13 +160,17 @@ def p95(series: pd.Series) -> float:
     return float(series.quantile(0.95)) if not series.empty else 0.0
 
 
+def bytes_to_packets(series: pd.Series) -> pd.Series:
+    return series / MSS_BYTES
+
+
 def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float) -> dict[str, float | int | str | None]:
     window_start = max(float(grid.max()) - final_window, float(grid.min())) if len(grid) else 0.0
     app = resample_to_grid(bundle.app_goodput, grid)
     subflow_total = aggregate_subflows(bundle, grid)
     hol_gap = (subflow_total - app).clip(lower=0)
-    hol = sample_hold_to_grid(bundle.hol_blocked, grid) / 1024
-    dsn_gap = sample_hold_to_grid(bundle.dsn_gap, grid) / 1024
+    hol = bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid))
+    dsn_gap = bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid))
 
     row: dict[str, float | int | str | None] = {
         "variant": bundle.variant,
@@ -176,13 +181,13 @@ def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float
         "app_goodput_mbps": window_mean(app / 1e6, window_start),
         "subflow_sum_mbps": window_mean(subflow_total / 1e6, window_start),
         "hol_gap_mbps": window_mean(hol_gap / 1e6, window_start),
-        "hol_blocked_kib": window_mean(hol, window_start),
-        "dsn_gap_kib": window_mean(dsn_gap, window_start),
-        "max_hol_blocked_kib": float(hol.max()) if not hol.empty else 0.0,
-        "p95_hol_blocked_kib": p95(hol),
+        "hol_blocked_packets": window_mean(hol, window_start),
+        "dsn_gap_packets": window_mean(dsn_gap, window_start),
+        "max_hol_blocked_packets": float(hol.max()) if not hol.empty else 0.0,
+        "p95_hol_blocked_packets": p95(hol),
         "hol_blocked_fraction": float((hol > 0).mean()) if not hol.empty else 0.0,
-        "max_dsn_gap_kib": float(dsn_gap.max()) if not dsn_gap.empty else 0.0,
-        "p95_dsn_gap_kib": p95(dsn_gap),
+        "max_dsn_gap_packets": float(dsn_gap.max()) if not dsn_gap.empty else 0.0,
+        "p95_dsn_gap_packets": p95(dsn_gap),
     }
     for index, series in enumerate(bundle.subflows, start=1):
         row[f"subflow_{index}_mbps"] = window_mean(resample_to_grid(series, grid) / 1e6, window_start)
@@ -228,11 +233,11 @@ def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: n
 def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     for bundle in bundles:
-        axes[0].plot(grid, sample_hold_to_grid(bundle.hol_blocked, grid) / 1024, label=bundle.label)
-        axes[1].plot(grid, sample_hold_to_grid(bundle.dsn_gap, grid) / 1024, label=bundle.label)
-    axes[0].set_ylabel("HoL blocked (KiB)")
+        axes[0].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid)), label=bundle.label)
+        axes[1].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid)), label=bundle.label)
+    axes[0].set_ylabel("HoL blocked (MSS packets)")
     axes[0].set_title(f"Receiver HoL, {variant}")
-    axes[1].set_ylabel("DSN gap (KiB)")
+    axes[1].set_ylabel("DSN gap (MSS packets)")
     axes[1].set_xlabel("Time (s)")
     for ax in axes:
         ax.grid(True, alpha=0.3)
@@ -293,15 +298,15 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     )
     plot_summary_lines(
         summary,
-        "max_hol_blocked_kib",
-        "Max HoL-blocked data (KiB)",
+        "max_hol_blocked_packets",
+        "Max HoL-blocked data (MSS packets)",
         "Peak Receiver HoL vs Variable Path RTT",
         aggregate_dir / "max_hol_blocked_vs_rtt.pdf",
     )
     plot_summary_lines(
         summary,
-        "p95_hol_blocked_kib",
-        "P95 HoL-blocked data (KiB)",
+        "p95_hol_blocked_packets",
+        "P95 HoL-blocked data (MSS packets)",
         "P95 Receiver HoL vs Variable Path RTT",
         aggregate_dir / "p95_hol_blocked_vs_rtt.pdf",
     )
@@ -314,8 +319,8 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     )
     plot_summary_lines(
         summary,
-        "max_dsn_gap_kib",
-        "Max DSN gap (KiB)",
+        "max_dsn_gap_packets",
+        "Max DSN gap (MSS packets)",
         "Peak DSN Gap vs Variable Path RTT",
         aggregate_dir / "max_dsn_gap_vs_rtt.pdf",
     )
