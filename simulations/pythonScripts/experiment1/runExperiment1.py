@@ -290,7 +290,8 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         str(entry.run),
     ]
     return_code, _timed_out = run_logged_command(command, SCRIPT_DIR, log_path)
-    return entry, return_code == 0 and out_root.exists(), return_code, log_path
+    ok = return_code == 0 and out_root.is_dir() and any(out_root.rglob("*.csv"))
+    return entry, ok, return_code, log_path
 
 
 def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Namespace) -> None:

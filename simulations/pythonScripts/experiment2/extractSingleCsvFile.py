@@ -39,16 +39,50 @@ def parse_if_number(value: str):
 
 
 def parse_ndarray(value: str):
-    return np.fromstring(value, sep=" ") if value else None
+    if value is None:
+        return None
+    if isinstance(value, float) and np.isnan(value):
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    values = np.fromstring(text, sep=" ")
+    if values.size == 0 and "," in text:
+        values = np.fromstring(text.replace(",", " "), sep=" ")
+    return values if values.size else None
 
 
 def vector_name(name: str) -> str:
-    return name.split(":", 1)[0]
+    return name.split(":", 1)[0].strip()
 
 
 def clean_module_name(name: str) -> str:
     # Server threads get unique suffixes; remove them so app-level goodput paths are stable.
     return re.sub(r"\.thread_\d+", "", name)
+
+
+def write_metric(out_root: Path, module_name: str, metric: str, times, values) -> bool:
+    if times is None or values is None:
+        return False
+    times = np.asarray(times, dtype=float)
+    values = np.asarray(values, dtype=float)
+    if times.size == 0 or values.size == 0:
+        return False
+    count = min(times.size, values.size)
+    out_dir = out_root / clean_module_name(module_name)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame({"time": times[:count], metric: values[:count]}).to_csv(out_dir / f"{metric}.csv", index=False)
+    return True
+
+
+def print_zero_diagnostics(results: pd.DataFrame, vectors: pd.DataFrame) -> None:
+    print("wrote no vector CSV files; input summary follows")
+    print("columns:", ", ".join(str(column) for column in results.columns))
+    if "type" in results.columns:
+        print("type counts:", results["type"].astype(str).str.strip().value_counts().head(12).to_dict())
+    if not vectors.empty and "name" in vectors.columns:
+        names = sorted({vector_name(str(name)) for name in vectors["name"].dropna()})
+        print("first vector metric names:", ", ".join(names[:40]))
 
 
 def main() -> int:
@@ -75,7 +109,17 @@ def main() -> int:
         },
     )
 
-    vectors = results[results.type == "vector"]
+    required = {"module", "name"}
+    if not required.issubset(results.columns):
+        print(f"missing required columns in {csv_path}: {sorted(required - set(results.columns))}")
+        print("columns:", ", ".join(str(column) for column in results.columns))
+        return 1
+
+    if "type" in results.columns:
+        vectors = results[results["type"].astype(str).str.strip().str.lower().eq("vector")]
+    else:
+        vectors = results
+
     out_root = (
         Path(__file__).resolve().parents[2]
         / "experiments"
@@ -86,23 +130,32 @@ def main() -> int:
     )
 
     written = 0
-    for _, row in vectors.iterrows():
-        metric = vector_name(str(row["name"]))
-        if metric not in VECTORS_TO_EXTRACT:
-            continue
-
-        values = row["vecvalue"]
-        times = row["vectime"]
-        if values is None or times is None:
-            continue
-
-        module_name = clean_module_name(str(row["module"]))
-        out_dir = out_root / module_name
-        out_dir.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame({"time": times, metric: values}).to_csv(out_dir / f"{metric}.csv", index=False)
-        written += 1
+    if {"vectime", "vecvalue"}.issubset(vectors.columns):
+        for _, row in vectors.iterrows():
+            metric = vector_name(str(row["name"]))
+            if metric not in VECTORS_TO_EXTRACT:
+                continue
+            if write_metric(out_root, str(row["module"]), metric, row["vectime"], row["vecvalue"]):
+                written += 1
+    elif {"time", "value"}.issubset(vectors.columns):
+        for (module_name, name), group in vectors.groupby(["module", "name"], sort=False):
+            metric = vector_name(str(name))
+            if metric not in VECTORS_TO_EXTRACT:
+                continue
+            times = pd.to_numeric(group["time"], errors="coerce").to_numpy()
+            values = pd.to_numeric(group["value"], errors="coerce").to_numpy()
+            mask = np.isfinite(times) & np.isfinite(values)
+            if write_metric(out_root, str(module_name), metric, times[mask], values[mask]):
+                written += 1
+    else:
+        print("unsupported vector CSV layout: expected vectime/vecvalue or time/value columns")
+        print("columns:", ", ".join(str(column) for column in results.columns))
+        return 1
 
     print(f"wrote {written} vector CSV files under {out_root}")
+    if written == 0:
+        print_zero_diagnostics(results, vectors)
+        return 1
     return 0
 
 
