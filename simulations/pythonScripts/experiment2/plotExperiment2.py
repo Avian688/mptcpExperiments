@@ -285,7 +285,7 @@ def save_dsn_gap_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Pa
     plt.close(fig)
 
 
-def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, final_window: float) -> None:
+def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, final_window: float) -> pd.DataFrame:
     rows = []
     window_start = max(float(grid.max()) - final_window, float(grid.min())) if len(grid) else 0.0
     for bundle in bundles:
@@ -306,6 +306,11 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
         row["jain_fairness"] = jain(np.asarray(user_means))
         row["a_vs_mean_ratio"] = user_means[0] / float(np.mean(user_means)) if np.mean(user_means) > 0 else 0.0
         row["a_vs_bc_mean_ratio"] = user_means[0] / float(np.mean(user_means[1:])) if np.mean(user_means[1:]) > 0 else 0.0
+        for path_index in sorted(PATH_QUEUE_MODULES):
+            row[f"path_{path_index}_queue_pkts"] = final_window_mean(
+                resample_to_grid(bundle.queues.get(path_index), grid),
+                window_start,
+            )
         rows.append(row)
 
     summary = pd.DataFrame(rows)
@@ -338,6 +343,99 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
     fig.tight_layout()
     fig.savefig(out_dir / "summary_final_window.pdf")
     plt.close(fig)
+    return summary
+
+
+def save_aggregate_summary_plots(summary: pd.DataFrame, out_dir: Path) -> None:
+    aggregate_dir = out_dir / "aggregate"
+    aggregate_dir.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(aggregate_dir / "summary_final_window.csv", index=False)
+
+    labels = summary["label"].tolist()
+    x = np.arange(len(summary))
+    width = 0.22
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    for offset, user_label in zip((-width, 0, width), ("A", "B", "C")):
+        axes[0].bar(x + offset, summary[f"user_{user_label}_goodput_mbps"], width, label=f"user {user_label}")
+    axes[0].set_title("Per-User Goodput")
+    axes[0].set_ylabel("Mbps")
+    axes[0].set_xticks(x, labels, rotation=20, ha="right")
+    axes[0].grid(True, axis="y", alpha=0.3)
+    axes[0].legend(fontsize=8)
+
+    axes[1].bar(x, summary["jain_fairness"])
+    axes[1].set_title("Jain Fairness")
+    axes[1].set_ylim(0, 1.05)
+    axes[1].set_xticks(x, labels, rotation=20, ha="right")
+    axes[1].grid(True, axis="y", alpha=0.3)
+
+    axes[2].bar(x, summary["a_vs_bc_mean_ratio"])
+    axes[2].set_title("User A / Mean(B,C)")
+    axes[2].set_ylim(0, 1.1)
+    axes[2].set_xticks(x, labels, rotation=20, ha="right")
+    axes[2].grid(True, axis="y", alpha=0.3)
+
+    fig.tight_layout()
+    fig.savefig(aggregate_dir / "fairness_and_goodput_summary.pdf")
+    plt.close(fig)
+
+    hol_columns = [f"user_{user}_hol_blocked_kib" for user in ("A", "B", "C")]
+    dsn_columns = [f"user_{user}_dsn_gap_kib" for user in ("A", "B", "C")]
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    for offset, user_label, column in zip((-width, 0, width), ("A", "B", "C"), hol_columns):
+        axes[0].bar(x + offset, summary[column], width, label=f"user {user_label}")
+    axes[0].set_title("Final-Window HoL-Blocked Data")
+    axes[0].set_ylabel("KiB")
+    axes[0].set_xticks(x, labels, rotation=20, ha="right")
+    axes[0].grid(True, axis="y", alpha=0.3)
+    axes[0].legend(fontsize=8)
+
+    for offset, user_label, column in zip((-width, 0, width), ("A", "B", "C"), dsn_columns):
+        axes[1].bar(x + offset, summary[column], width, label=f"user {user_label}")
+    axes[1].set_title("Final-Window DSN Gap")
+    axes[1].set_ylabel("KiB")
+    axes[1].set_xticks(x, labels, rotation=20, ha="right")
+    axes[1].grid(True, axis="y", alpha=0.3)
+    axes[1].legend(fontsize=8)
+
+    fig.tight_layout()
+    fig.savefig(aggregate_dir / "hol_summary.pdf")
+    plt.close(fig)
+
+    queue_columns = [f"path_{path_index}_queue_pkts" for path_index in sorted(PATH_QUEUE_MODULES)]
+    if all(column in summary.columns for column in queue_columns):
+        matrix = summary[queue_columns].to_numpy(dtype=float)
+        fig, ax = plt.subplots(figsize=(10, max(2.8, 0.7 * len(summary))))
+        image = ax.imshow(matrix, aspect="auto", cmap="viridis")
+        ax.set_title("Final-Window Forward Queue Occupancy")
+        ax.set_xlabel("Path")
+        ax.set_ylabel("Protocol")
+        ax.set_xticks(np.arange(len(queue_columns)), [str(index) for index in sorted(PATH_QUEUE_MODULES)])
+        ax.set_yticks(np.arange(len(summary)), labels)
+        for row in range(matrix.shape[0]):
+            for col in range(matrix.shape[1]):
+                ax.text(col, row, f"{matrix[row, col]:.0f}", ha="center", va="center", color="white", fontsize=8)
+        cbar = fig.colorbar(image, ax=ax)
+        cbar.set_label("Queue length (packets)")
+        fig.tight_layout()
+        fig.savefig(aggregate_dir / "queue_occupancy_heatmap.pdf")
+        plt.close(fig)
+
+
+def save_protocol_plots(bundle: SeriesBundle, out_root: Path, final_window: float) -> None:
+    out_dir = out_root / "by_protocol" / bundle.protocol
+    out_dir.mkdir(parents=True, exist_ok=True)
+    grid = common_grid([bundle])
+    if len(grid) == 0:
+        return
+    save_user_goodput_plot([bundle], grid, out_dir)
+    save_subflow_plot([bundle], grid, out_dir)
+    save_queue_plot([bundle], grid, out_dir)
+    save_jain_plot([bundle], grid, out_dir)
+    save_hol_blocked_plot([bundle], grid, out_dir)
+    save_dsn_gap_plot([bundle], grid, out_dir)
+    save_summary([bundle], grid, out_dir, final_window)
 
 
 def main() -> int:
@@ -366,14 +464,12 @@ def main() -> int:
         print("no usable timeseries data found")
         return 1
 
-    save_user_goodput_plot(bundles, grid, out_dir)
-    save_subflow_plot(bundles, grid, out_dir)
-    save_queue_plot(bundles, grid, out_dir)
-    save_jain_plot(bundles, grid, out_dir)
-    save_hol_blocked_plot(bundles, grid, out_dir)
-    save_dsn_gap_plot(bundles, grid, out_dir)
-    save_summary(bundles, grid, out_dir, args.final_window)
-    print(f"wrote plots and summary under {out_dir}")
+    summary = save_summary(bundles, grid, out_dir, args.final_window)
+    save_aggregate_summary_plots(summary, out_dir)
+    for bundle in bundles:
+        save_protocol_plots(bundle, out_dir, args.final_window)
+    print(f"wrote aggregate plots under {out_dir / 'aggregate'}")
+    print(f"wrote per-protocol plots under {out_dir / 'by_protocol'}")
     return 0
 
 

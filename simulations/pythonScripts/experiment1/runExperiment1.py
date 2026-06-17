@@ -23,13 +23,24 @@ CONFIGS = [
     ("MpOrbDirectPull", "mporb", "directPull"),
 ]
 
+DEFAULT_RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
+
 
 @dataclass(frozen=True)
 class Entry:
     config: str
     protocol: str
     scheduler: str
+    variable_rtt_ms: int
     run: int = 1
+
+    @property
+    def variant(self) -> str:
+        return f"{self.variable_rtt_ms}ms"
+
+    @property
+    def result_base(self) -> str:
+        return f"{self.config}_{self.variant}"
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -70,6 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true", help="Skip simulations with existing vector output.")
     parser.add_argument("--clean", action="store_true", help="Remove experiment1 results/csvs/plots before running.")
     parser.add_argument("--configs", nargs="*", default=[entry[0] for entry in CONFIGS])
+    parser.add_argument("--rtts-ms", nargs="*", type=int, default=DEFAULT_RTT_SWEEP_MS)
     return parser.parse_args()
 
 
@@ -79,7 +91,8 @@ def enabled(step: int, args: argparse.Namespace) -> bool:
 
 def entries(args: argparse.Namespace) -> list[Entry]:
     wanted = set(args.configs)
-    return [Entry(*item) for item in CONFIGS if item[0] in wanted]
+    rtts = sorted(set(args.rtts_ms))
+    return [Entry(*item, variable_rtt_ms=rtt) for item in CONFIGS if item[0] in wanted for rtt in rtts]
 
 
 def common_ned_path() -> str:
@@ -122,20 +135,20 @@ def load_libs() -> list[str]:
 
 
 def expected_vec(entry: Entry) -> Path:
-    return RESULTS_DIR / f"{entry.config}-#0.vec"
+    return RESULTS_DIR / f"{entry.result_base}-#0.vec"
 
 
 def expected_sca(entry: Entry) -> Path:
-    return RESULTS_DIR / f"{entry.config}-#0.sca"
+    return RESULTS_DIR / f"{entry.result_base}-#0.sca"
 
 
 def expected_export(entry: Entry) -> Path:
-    return RESULTS_DIR / f"{entry.config}.csv"
+    return RESULTS_DIR / f"{entry.result_base}.csv"
 
 
 def clean_entry(entry: Entry) -> None:
     for suffix in ("-#0.vec", "-#0.vci", "-#0.sca", ".csv"):
-        (RESULTS_DIR / f"{entry.config}{suffix}").unlink(missing_ok=True)
+        (RESULTS_DIR / f"{entry.result_base}{suffix}").unlink(missing_ok=True)
 
 
 def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
@@ -153,6 +166,9 @@ def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
         "-n",
         common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
+        f"--**.variablePathRtt={entry.variable_rtt_ms}ms",
+        f"--output-vector-file=results/{entry.result_base}-#0.vec",
+        f"--output-scalar-file=results/{entry.result_base}-#0.sca",
     ]
     for lib in load_libs():
         cmd.extend(["-l", lib])
@@ -253,7 +269,7 @@ def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool,
         return entry, True, 0, Path()
     clean_entry(entry)
 
-    log_path = LOG_DIR / "simulations" / f"{entry.config}.log"
+    log_path = LOG_DIR / "simulations" / f"{entry.result_base}.log"
     command = simulation_command(entry, args)
     return_code, timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path, args.sim_timeout_seconds)
     ok = not timed_out and return_code == 0 and expected_vec(entry).exists() and expected_sca(entry).exists()
@@ -263,24 +279,24 @@ def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool,
 def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     csv_path = expected_export(entry)
     csv_path.unlink(missing_ok=True)
-    log_path = LOG_DIR / "scavetool" / f"{entry.config}.log"
+    log_path = LOG_DIR / "scavetool" / f"{entry.result_base}.log"
     command = [
         tool_path("opp_scavetool"),
         "export",
         "-o",
-        f"results/{entry.config}.csv",
+        f"results/{entry.result_base}.csv",
         "-F",
         "CSV-R",
-        f"results/{entry.config}-#0.vec",
+        f"results/{entry.result_base}-#0.vec",
     ]
     return_code, _timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path)
     return entry, return_code == 0 and csv_path.exists(), return_code, log_path
 
 
 def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
-    out_root = EXPERIMENT_DIR / "csvs" / entry.protocol / entry.scheduler / f"run{entry.run}"
+    out_root = EXPERIMENT_DIR / "csvs" / entry.protocol / entry.scheduler / entry.variant / f"run{entry.run}"
     shutil.rmtree(out_root, ignore_errors=True)
-    log_path = LOG_DIR / "extract" / f"{entry.config}.log"
+    log_path = LOG_DIR / "extract" / f"{entry.result_base}.log"
     command = [
         sys.executable,
         str(SCRIPT_DIR / "extractSingleCsvFile.py"),
@@ -288,6 +304,7 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         entry.protocol,
         entry.scheduler,
         str(entry.run),
+        entry.variant,
     ]
     return_code, _timed_out = run_logged_command(command, SCRIPT_DIR, log_path)
     ok = return_code == 0 and out_root.is_dir() and any(out_root.rglob("*.csv"))
@@ -312,10 +329,10 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
             for future in as_completed(futures):
                 entry, ok, code, log_path = future.result()
                 if ok:
-                    print(f"  ok: {entry.config}")
+                    print(f"  ok: {entry.result_base}")
                 else:
                     failures.append(entry)
-                    line = f"{entry.config} (exit {code}, log: {log_path})"
+                    line = f"{entry.result_base} (exit {code}, log: {log_path})"
                     failure_lines.append(line)
                     print(f"  failed: {line}")
         except KeyboardInterrupt:

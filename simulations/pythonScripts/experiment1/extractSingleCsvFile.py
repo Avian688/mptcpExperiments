@@ -86,14 +86,15 @@ def print_zero_diagnostics(results: pd.DataFrame, vectors: pd.DataFrame) -> None
 
 
 def main() -> int:
-    if len(sys.argv) != 5:
-        print("usage: extractSingleCsvFile.py <scavetool_csv> <protocol> <scheduler> <run>")
+    if len(sys.argv) not in (5, 6):
+        print("usage: extractSingleCsvFile.py <scavetool_csv> <protocol> <scheduler> <run> [variant]")
         return 2
 
     csv_path = Path(sys.argv[1])
     protocol = sys.argv[2]
     scheduler = sys.argv[3]
     run = sys.argv[4]
+    variant = sys.argv[5] if len(sys.argv) == 6 else None
 
     if not csv_path.exists():
         print(f"missing input CSV: {csv_path}")
@@ -121,15 +122,15 @@ def main() -> int:
     else:
         vectors = results
 
-    out_root = (
+    out_root_base = (
         Path(__file__).resolve().parents[2]
         / "experiments"
         / "experiment1"
         / "csvs"
         / protocol
         / scheduler
-        / f"run{run}"
     )
+    out_root = out_root_base / variant / f"run{run}" if variant else out_root_base / f"run{run}"
 
     written = 0
     if {"vectime", "vecvalue"}.issubset(vectors.columns):

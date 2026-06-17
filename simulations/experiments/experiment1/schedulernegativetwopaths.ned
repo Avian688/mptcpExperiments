@@ -12,31 +12,10 @@ network schedulernegativetwopaths
     parameters:
         @display("bgb=720,440");
         int numberOfClientServers = default(1);
-
-    types:
-        channel accessLine60ms extends DatarateChannel
-        {
-            delay = 15ms;
-            datarate = 10Gbps;
-        }
-
-        channel bottleneckLine25Mbps extends DatarateChannel
-        {
-            delay = 0ms;
-            datarate = 25Mbps;
-        }
-
-        channel accessLine100ms extends DatarateChannel
-        {
-            delay = 25ms;
-            datarate = 10Gbps;
-        }
-
-        channel bottleneckLine100Mbps extends DatarateChannel
-        {
-            delay = 0ms;
-            datarate = 100Mbps;
-        }
+        double fixedPathRtt @unit(s) = default(20ms);
+        double variablePathRtt @unit(s) = default(60ms);
+        double fixedPathDatarate @unit(bps) = default(10Mbps);
+        double variablePathDatarate @unit(bps) = default(100Mbps);
 
     submodules:
         client[numberOfClientServers]: StandardHost {
@@ -73,15 +52,15 @@ network schedulernegativetwopaths
 
     connections:
         for i=0..sizeof(client)-1 {
-            // Path 0: 60 ms RTT, 25 Mbps bottleneck.
-            client[i].pppg++ <--> accessLine60ms <--> router1a.pppg++;
-            router2a.pppg++ <--> accessLine60ms <--> server[i].pppg++;
+            // Path 0: fixed RTT and bottleneck.
+            client[i].pppg++ <--> DatarateChannel { delay = fixedPathRtt / 4; datarate = 10Gbps; } <--> router1a.pppg++;
+            router2a.pppg++ <--> DatarateChannel { delay = fixedPathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
 
-            // Path 1: 100 ms RTT, 100 Mbps bottleneck.
-            client[i].pppg++ <--> accessLine100ms <--> router1b.pppg++;
-            router2b.pppg++ <--> accessLine100ms <--> server[i].pppg++;
+            // Path 1: variable RTT and bottleneck.
+            client[i].pppg++ <--> DatarateChannel { delay = variablePathRtt / 4; datarate = 10Gbps; } <--> router1b.pppg++;
+            router2b.pppg++ <--> DatarateChannel { delay = variablePathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
         }
 
-        router1a.pppg++ <--> bottleneckLine25Mbps <--> router2a.pppg++;
-        router1b.pppg++ <--> bottleneckLine100Mbps <--> router2b.pppg++;
+        router1a.pppg++ <--> DatarateChannel { delay = 0ms; datarate = fixedPathDatarate; } <--> router2a.pppg++;
+        router1b.pppg++ <--> DatarateChannel { delay = 0ms; datarate = variablePathDatarate; } <--> router2b.pppg++;
 }
