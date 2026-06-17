@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
-QUEUE_PACKETS = 1554
+MSS_BYTES = 1448
 FIXED_PATH_RTT_MS = 20
-FIXED_PATH_DATARATE = "10Mbps"
-VARIABLE_PATH_DATARATE = "100Mbps"
+FIXED_PATH_DATARATE_MBPS = 10
+VARIABLE_PATH_DATARATE_MBPS = 100
+FIXED_PATH_DATARATE = f"{FIXED_PATH_DATARATE_MBPS}Mbps"
+VARIABLE_PATH_DATARATE = f"{VARIABLE_PATH_DATARATE_MBPS}Mbps"
 
 SCHEDULERS = [
     ("Default", "default"),
@@ -34,6 +37,17 @@ PROTOCOLS = {
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
 EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment1"
+
+
+def bdp_packets(datarate_mbps: int, rtt_ms: int) -> int:
+    return math.ceil(datarate_mbps * 1_000_000 * (rtt_ms / 1000) / (MSS_BYTES * 8))
+
+
+def queue_packets_for(variable_rtt_ms: int) -> int:
+    fixed = (FIXED_PATH_RTT_MS, bdp_packets(FIXED_PATH_DATARATE_MBPS, FIXED_PATH_RTT_MS))
+    variable = (variable_rtt_ms, bdp_packets(VARIABLE_PATH_DATARATE_MBPS, variable_rtt_ms))
+    higher_rtt = max(fixed[0], variable[0])
+    return max(packets for rtt_ms, packets in (fixed, variable) if rtt_ms == higher_rtt)
 
 
 def common_ned_path_line() -> str:
@@ -79,8 +93,8 @@ def write_common_general(w) -> None:
         "",
         "# Path 0 is fixed at 20 ms RTT / 10 Mbps.",
         "# Path 1 is swept from 20 ms to 180 ms RTT at 100 Mbps.",
-        "# The common queue size uses the highest swept BDP:",
-        "# 100 Mbps * 180 ms = ceil(18,000,000 / (1448 * 8)) = 1554 packets.",
+        "# Each config sets queue capacity to the BDP of that run's higher-RTT path.",
+        "# Example: 100 Mbps * 180 ms = ceil(18,000,000 / (1448 * 8)) = 1554 packets.",
         "**.numberOfClientServers = 1",
         "**.numberOfSubflows = 2",
         "**.startAllSubflowsAtBeginning = true",
@@ -158,7 +172,6 @@ def write_protocol_general(w, protocol: str, settings: dict[str, str]) -> None:
         w('**.router1a.ppp[1].queue.typename = "IntQueue"')
         w('**.router1b.ppp[1].queue.typename = "IntQueue"')
     w('**.ppp[*].queue.typename = "DropTailQueue"')
-    w(f"**.ppp[*].queue.packetCapacity = {QUEUE_PACKETS}")
     w('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         w("**.additiveIncreasePercent = 0.05")
@@ -175,6 +188,8 @@ def write_config(w, settings: dict[str, str], scheduler_title: str, scheduler_mo
     w(f'description = "{settings["description"]}, {scheduler_mode} scheduler, variable path {rtt_ms} ms RTT."')
     w(f'**.schedulerMode = "{scheduler_mode}"')
     w(f"**.variablePathRtt = {rtt_ms}ms")
+    w(f"# Queue = BDP of the higher-RTT path for this config.")
+    w(f"**.ppp[*].queue.packetCapacity = {queue_packets_for(rtt_ms)}")
     w(f'*.scenarioManager.script = xmldoc("../scenarios/experiment1/{rtt_ms}ms.xml")')
     w(f'output-vector-file = "results/{config_name}-#0.vec"')
     w(f'output-scalar-file = "results/{config_name}-#0.sca"')

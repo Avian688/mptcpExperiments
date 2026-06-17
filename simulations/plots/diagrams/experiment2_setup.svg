@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="950" viewBox="0 0 1600 950">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#0f172a" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="950" fill="#f8fafc"/>
+<text x="70" y="58" font-family="Inter, Helvetica, Arial, sans-serif" font-size="34" font-weight="850" fill="#0f172a" text-anchor="start">Experiment 2: Uncoupled Fairness over Shared LEO Paths</text>
+<text x="70" y="94" font-family="Inter, Helvetica, Arial, sans-serif" font-size="19" font-weight="500" fill="#475569" text-anchor="start">Three users, four subflows each, eight 100 Mbps paths with staggered RTTs.</text>
+<text x="70" y="120" font-family="Inter, Helvetica, Arial, sans-serif" font-size="19" font-weight="500" fill="#475569" text-anchor="start">Goal: show uncoupled per-subflow control lets users with private paths win over a user whose paths are all shared.</text>
+<rect x="70" y="160" width="95" height="28" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="117.5" y="180" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0f172a" text-anchor="middle">User A</text>
+<text x="180" y="181" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="650" fill="#475569" text-anchor="start">paths 1-4; all shared</text>
+<rect x="420" y="160" width="95" height="28" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="467.5" y="180" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0f172a" text-anchor="middle">User B</text>
+<text x="530" y="181" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="650" fill="#475569" text-anchor="start">paths 1,2,5,6</text>
+<rect x="770" y="160" width="95" height="28" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="817.5" y="180" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#0f172a" text-anchor="middle">User C</text>
+<text x="880" y="181" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="650" fill="#475569" text-anchor="start">paths 3,4,7,8</text>
+<rect x="1220" y="142" width="320" height="116" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="1238" y="174" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">Configs</text>
+<text x="1238" y="198" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">CubicUncoupled</text>
+<text x="1238" y="222" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">MpOrbUncoupled</text>
+<text x="1238" y="246" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">4 subflows per user</text>
+<rect x="1220" y="278" width="320" height="116" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+<text x="1238" y="310" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">Common path settings</text>
+<text x="1238" y="334" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">100 Mbps each</text>
+<text x="1238" y="358" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">RTT 60-130 ms</text>
+<text x="1238" y="382" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">1 BDP buffer = 1123 packets</text>
+<text x="70" y="250" font-family="Inter, Helvetica, Arial, sans-serif" font-size="25" font-weight="850" fill="#0f172a" text-anchor="start">LEO Path Pool</text>
+<text x="70" y="282" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="600" fill="#475569" text-anchor="start">Each row is one router1[i] -&gt; router2[i] bottleneck. Colored chips show which users put subflows on it.</text>
+<rect x="70" y="315" width="1120" height="38" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P1</text>
+<text x="155" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">60 ms RTT</text>
+<line x1="285" y1="334" x2="720" y2="334" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="323" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="339" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="320" width="36" height="28" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="918.0" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#2563eb" text-anchor="middle">A</text>
+<rect x="944" y="320" width="36" height="28" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="962.0" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#16a34a" text-anchor="middle">B</text>
+<text x="1080" y="340" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#dc2626" text-anchor="middle">shared A+B</text>
+<rect x="70" y="363" width="1120" height="38" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P2</text>
+<text x="155" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">70 ms RTT</text>
+<line x1="285" y1="382" x2="720" y2="382" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="371" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="387" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="368" width="36" height="28" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="918.0" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#2563eb" text-anchor="middle">A</text>
+<rect x="944" y="368" width="36" height="28" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="962.0" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#16a34a" text-anchor="middle">B</text>
+<text x="1080" y="388" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#dc2626" text-anchor="middle">shared A+B</text>
+<rect x="70" y="411" width="1120" height="38" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P3</text>
+<text x="155" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">80 ms RTT</text>
+<line x1="285" y1="430" x2="720" y2="430" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="419" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="435" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="416" width="36" height="28" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="918.0" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#2563eb" text-anchor="middle">A</text>
+<rect x="944" y="416" width="36" height="28" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="962.0" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#7c3aed" text-anchor="middle">C</text>
+<text x="1080" y="436" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#dc2626" text-anchor="middle">shared A+C</text>
+<rect x="70" y="459" width="1120" height="38" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P4</text>
+<text x="155" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">90 ms RTT</text>
+<line x1="285" y1="478" x2="720" y2="478" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="467" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="483" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="464" width="36" height="28" rx="14" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="918.0" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#2563eb" text-anchor="middle">A</text>
+<rect x="944" y="464" width="36" height="28" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="962.0" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#7c3aed" text-anchor="middle">C</text>
+<text x="1080" y="484" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#dc2626" text-anchor="middle">shared A+C</text>
+<rect x="70" y="507" width="1120" height="38" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="532" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P5</text>
+<text x="155" y="532" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">100 ms RTT</text>
+<line x1="285" y1="526" x2="720" y2="526" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="515" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="531" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="532" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="512" width="36" height="28" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="918.0" y="532" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#16a34a" text-anchor="middle">B</text>
+<text x="1080" y="532" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#475569" text-anchor="middle">private to B</text>
+<rect x="70" y="555" width="1120" height="38" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="580" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P6</text>
+<text x="155" y="580" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">110 ms RTT</text>
+<line x1="285" y1="574" x2="720" y2="574" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="563" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="579" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="580" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="560" width="36" height="28" rx="14" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="918.0" y="580" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#16a34a" text-anchor="middle">B</text>
+<text x="1080" y="580" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#475569" text-anchor="middle">private to B</text>
+<rect x="70" y="603" width="1120" height="38" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="628" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P7</text>
+<text x="155" y="628" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">120 ms RTT</text>
+<line x1="285" y1="622" x2="720" y2="622" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="611" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="627" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="628" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="608" width="36" height="28" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="918.0" y="628" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#7c3aed" text-anchor="middle">C</text>
+<text x="1080" y="628" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#475569" text-anchor="middle">private to C</text>
+<rect x="70" y="651" width="1120" height="38" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+<text x="92" y="676" font-family="Inter, Helvetica, Arial, sans-serif" font-size="18" font-weight="850" fill="#0f172a" text-anchor="start">P8</text>
+<text x="155" y="676" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#475569" text-anchor="start">130 ms RTT</text>
+<line x1="285" y1="670" x2="720" y2="670" stroke="#0f172a" stroke-width="5" stroke-linecap="round" opacity="0.25"/>
+<rect x="450" y="659" width="112" height="22" rx="6" fill="#e2e8f0" stroke="#475569" stroke-width="1"/>
+<text x="506" y="675" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="800" fill="#0f172a" text-anchor="middle">100 Mbps</text>
+<text x="755" y="676" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#475569" text-anchor="start">Q=1123 pkts</text>
+<rect x="900" y="656" width="36" height="28" rx="14" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="918.0" y="676" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="800" fill="#7c3aed" text-anchor="middle">C</text>
+<text x="1080" y="676" font-family="Inter, Helvetica, Arial, sans-serif" font-size="15" font-weight="750" fill="#475569" text-anchor="middle">private to C</text>
+<text x="70" y="710" font-family="Inter, Helvetica, Arial, sans-serif" font-size="24" font-weight="850" fill="#0f172a" text-anchor="start">User-to-Path Assignment Matrix</text>
+<rect x="70" y="735" width="702" height="168" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.4"/>
+<text x="187.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P1</text>
+<text x="265.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P2</text>
+<text x="343.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P3</text>
+<text x="421.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P4</text>
+<text x="499.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P5</text>
+<text x="577.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P6</text>
+<text x="655.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P7</text>
+<text x="733.0" y="763" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#0f172a" text-anchor="middle">P8</text>
+<text x="108" y="805" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#2563eb" text-anchor="middle">User A</text>
+<rect x="156" y="784" width="62" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="187.0" y="804" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#2563eb" text-anchor="middle">subflow</text>
+<rect x="234" y="784" width="62" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="265.0" y="804" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#2563eb" text-anchor="middle">subflow</text>
+<rect x="312" y="784" width="62" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="343.0" y="804" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#2563eb" text-anchor="middle">subflow</text>
+<rect x="390" y="784" width="62" height="28" rx="8" fill="#dbeafe" stroke="#2563eb" stroke-width="1.2"/>
+<text x="421.0" y="804" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#2563eb" text-anchor="middle">subflow</text>
+<rect x="468" y="784" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="546" y="784" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="624" y="784" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="702" y="784" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="108" y="847" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#16a34a" text-anchor="middle">User B</text>
+<rect x="156" y="826" width="62" height="28" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="187.0" y="846" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#16a34a" text-anchor="middle">subflow</text>
+<rect x="234" y="826" width="62" height="28" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="265.0" y="846" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#16a34a" text-anchor="middle">subflow</text>
+<rect x="312" y="826" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="390" y="826" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="468" y="826" width="62" height="28" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="499.0" y="846" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#16a34a" text-anchor="middle">subflow</text>
+<rect x="546" y="826" width="62" height="28" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.2"/>
+<text x="577.0" y="846" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#16a34a" text-anchor="middle">subflow</text>
+<rect x="624" y="826" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="702" y="826" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<text x="108" y="889" font-family="Inter, Helvetica, Arial, sans-serif" font-size="16" font-weight="850" fill="#7c3aed" text-anchor="middle">User C</text>
+<rect x="156" y="868" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="234" y="868" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="312" y="868" width="62" height="28" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="343.0" y="888" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#7c3aed" text-anchor="middle">subflow</text>
+<rect x="390" y="868" width="62" height="28" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="421.0" y="888" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#7c3aed" text-anchor="middle">subflow</text>
+<rect x="468" y="868" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="546" y="868" width="62" height="28" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>
+<rect x="624" y="868" width="62" height="28" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="655.0" y="888" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#7c3aed" text-anchor="middle">subflow</text>
+<rect x="702" y="868" width="62" height="28" rx="8" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.2"/>
+<text x="733.0" y="888" font-family="Inter, Helvetica, Arial, sans-serif" font-size="12" font-weight="850" fill="#7c3aed" text-anchor="middle">subflow</text>
+<rect x="910" y="745" width="620" height="160" rx="16" fill="#fee2e2" stroke="#dc2626" stroke-width="1.6"/>
+<text x="1220" y="777" font-family="Inter, Helvetica, Arial, sans-serif" font-size="22" font-weight="850" fill="#dc2626" text-anchor="middle">Expected uncoupled failure</text>
+<text x="950" y="810" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">A has four subflows, like B and C,</text>
+<text x="950" y="834" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">but every A path is shared.</text>
+<text x="950" y="858" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">B and C each get two private paths,</text>
+<text x="950" y="882" font-family="Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="650" fill="#0f172a" text-anchor="start">so A should see lower aggregate goodput.</text>
+</svg>

@@ -252,17 +252,38 @@ def reached_time_limit_before_cleanup(log_path: Path) -> bool:
     return "Simulation time limit reached" in text and "Calling finish() at end of Run" in text
 
 
+def nonempty(path: Path) -> bool:
+    return path.exists() and path.stat().st_size > 0
+
+
+def simulation_outputs_exist(entry: Entry) -> bool:
+    return nonempty(expected_vec(entry)) and nonempty(expected_sca(entry))
+
+
+def completed_with_teardown_abort(return_code: int, log_path: Path) -> bool:
+    if return_code not in {-6, 134} or not log_path.exists():
+        return False
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    finished = "\nEnd.\n" in text or text.rstrip().endswith("End.")
+    teardown_abort = "cSimulation::deleteNetwork" in text or "doDeleteModule" in text
+    return finished and teardown_abort
+
+
 def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool, int, Path]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    if args.resume and expected_vec(entry).exists() and expected_sca(entry).exists():
+    if args.resume and simulation_outputs_exist(entry):
         return entry, True, 0, Path()
     clean_entry(entry)
 
     log_path = LOG_DIR / "simulations" / f"{entry.config}.log"
     command = simulation_command(entry, args)
     return_code, timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path, args.sim_timeout_seconds)
-    has_results = expected_vec(entry).exists() and expected_sca(entry).exists()
-    ok = has_results and (return_code == 0 or reached_time_limit_before_cleanup(log_path))
+    outputs_ok = simulation_outputs_exist(entry)
+    ok = outputs_ok and (return_code == 0 or reached_time_limit_before_cleanup(log_path))
+    if not ok and not timed_out and outputs_ok and completed_with_teardown_abort(return_code, log_path):
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write("\nRunner note: treating nonzero teardown abort as success because OMNeT reached End. and result files exist.\n")
+        ok = True
     return entry, ok, return_code, log_path
 
 
