@@ -8,6 +8,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -39,6 +40,8 @@ REPO_ROOT = SAMPLES_ROOT.parent
 EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment1"
 RESULTS_DIR = EXPERIMENT_DIR / "results"
 LOG_DIR = SIM_ROOT / "logs" / "experiment1"
+ACTIVE_PROCESSES: set[subprocess.Popen] = set()
+ACTIVE_PROCESSES_LOCK = threading.Lock()
 
 
 def tool_path(name: str) -> str:
@@ -179,6 +182,28 @@ def terminate_process_group(process: subprocess.Popen) -> None:
         process.wait()
 
 
+def register_process(process: subprocess.Popen) -> None:
+    with ACTIVE_PROCESSES_LOCK:
+        ACTIVE_PROCESSES.add(process)
+
+
+def unregister_process(process: subprocess.Popen) -> None:
+    with ACTIVE_PROCESSES_LOCK:
+        ACTIVE_PROCESSES.discard(process)
+
+
+def terminate_all_active_processes() -> None:
+    with ACTIVE_PROCESSES_LOCK:
+        processes = list(ACTIVE_PROCESSES)
+    for process in processes:
+        terminate_process_group(process)
+
+
+def handle_termination_signal(signum, _frame) -> None:
+    print(f"\nReceived signal {signum}; cancelling experiment runner...", file=sys.stderr)
+    raise KeyboardInterrupt
+
+
 def run_logged_command(
     command: list[str],
     cwd: Path,
@@ -198,12 +223,21 @@ def run_logged_command(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
+        register_process(process)
         try:
             return_code = process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
             timed_out = True
             terminate_process_group(process)
             return_code = process.returncode if process.returncode is not None else 124
+        except BaseException:
+            terminate_process_group(process)
+            elapsed = time.monotonic() - started
+            log.write(f"\nInterrupted after {elapsed:.2f} seconds; terminated child process group\n")
+            log.flush()
+            raise
+        finally:
+            unregister_process(process)
 
         elapsed = time.monotonic() - started
         if timed_out:
@@ -230,7 +264,6 @@ def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     csv_path = expected_export(entry)
     csv_path.unlink(missing_ok=True)
     log_path = LOG_DIR / "scavetool" / f"{entry.config}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
         tool_path("opp_scavetool"),
         "export",
@@ -240,19 +273,14 @@ def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         "CSV-R",
         f"results/{entry.config}-#0.vec",
     ]
-    with log_path.open("w", encoding="utf-8") as log:
-        log.write("$ " + " ".join(command) + "\n\n")
-        log.flush()
-        result = subprocess.run(command, cwd=str(EXPERIMENT_DIR), stdout=log, stderr=subprocess.STDOUT)
-        log.write(f"\nExit code: {result.returncode}\n")
-    return entry, result.returncode == 0 and csv_path.exists(), result.returncode, log_path
+    return_code, _timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path)
+    return entry, return_code == 0 and csv_path.exists(), return_code, log_path
 
 
 def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     out_root = EXPERIMENT_DIR / "csvs" / entry.protocol / entry.scheduler / f"run{entry.run}"
     shutil.rmtree(out_root, ignore_errors=True)
     log_path = LOG_DIR / "extract" / f"{entry.config}.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
     command = [
         sys.executable,
         str(SCRIPT_DIR / "extractSingleCsvFile.py"),
@@ -261,12 +289,8 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         entry.scheduler,
         str(entry.run),
     ]
-    with log_path.open("w", encoding="utf-8") as log:
-        log.write("$ " + " ".join(command) + "\n\n")
-        log.flush()
-        result = subprocess.run(command, cwd=str(SCRIPT_DIR), stdout=log, stderr=subprocess.STDOUT)
-        log.write(f"\nExit code: {result.returncode}\n")
-    return entry, result.returncode == 0 and out_root.exists(), result.returncode, log_path
+    return_code, _timed_out = run_logged_command(command, SCRIPT_DIR, log_path)
+    return entry, return_code == 0 and out_root.exists(), return_code, log_path
 
 
 def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Namespace) -> None:
@@ -279,7 +303,10 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
         print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{attempts}, {args.cores} core(s)")
         failures: list[Entry] = []
         failure_lines: list[str] = []
-        with ThreadPoolExecutor(max_workers=args.cores) as executor:
+        executor = ThreadPoolExecutor(max_workers=args.cores)
+        futures = {}
+        interrupted = False
+        try:
             futures = {executor.submit(work, entry): entry for entry in pending}
             for future in as_completed(futures):
                 entry, ok, code, log_path = future.result()
@@ -290,6 +317,16 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
                     line = f"{entry.config} (exit {code}, log: {log_path})"
                     failure_lines.append(line)
                     print(f"  failed: {line}")
+        except KeyboardInterrupt:
+            interrupted = True
+            for future in futures:
+                future.cancel()
+            terminate_all_active_processes()
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
+        finally:
+            if not interrupted:
+                executor.shutdown(wait=True)
 
         pending = failures
         if pending and attempt < attempts:
@@ -300,28 +337,34 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
 
 
 def main() -> int:
+    signal.signal(signal.SIGTERM, handle_termination_signal)
     args = parse_args()
-    selected = entries(args)
-    if not selected:
-        print("no matching configs selected")
-        return 1
+    try:
+        selected = entries(args)
+        if not selected:
+            print("no matching configs selected")
+            return 1
 
-    if args.clean:
-        shutil.rmtree(RESULTS_DIR, ignore_errors=True)
-        shutil.rmtree(EXPERIMENT_DIR / "csvs", ignore_errors=True)
-        shutil.rmtree(SIM_ROOT / "plots" / "experiment1", ignore_errors=True)
+        if args.clean:
+            shutil.rmtree(RESULTS_DIR, ignore_errors=True)
+            shutil.rmtree(EXPERIMENT_DIR / "csvs", ignore_errors=True)
+            shutil.rmtree(SIM_ROOT / "plots" / "experiment1", ignore_errors=True)
 
-    if enabled(1, args):
-        run_parallel("Running simulations", lambda entry: run_simulation(entry, args), selected, args)
-    if enabled(2, args):
-        run_parallel("Exporting vectors", export_csv, selected, args)
-    if enabled(3, args):
-        run_parallel("Extracting metric CSVs", extract_csv, selected, args)
-    if enabled(4, args):
-        command = [sys.executable, str(SCRIPT_DIR / "plotExperiment1.py")]
-        result = subprocess.run(command, cwd=str(SCRIPT_DIR))
-        if result.returncode != 0:
-            return result.returncode
+        if enabled(1, args):
+            run_parallel("Running simulations", lambda entry: run_simulation(entry, args), selected, args)
+        if enabled(2, args):
+            run_parallel("Exporting vectors", export_csv, selected, args)
+        if enabled(3, args):
+            run_parallel("Extracting metric CSVs", extract_csv, selected, args)
+        if enabled(4, args):
+            command = [sys.executable, str(SCRIPT_DIR / "plotExperiment1.py")]
+            result = subprocess.run(command, cwd=str(SCRIPT_DIR))
+            if result.returncode != 0:
+                return result.returncode
+    except KeyboardInterrupt:
+        print("\nCancelled; terminating active child processes.", file=sys.stderr)
+        terminate_all_active_processes()
+        return 130
 
     return 0
 
