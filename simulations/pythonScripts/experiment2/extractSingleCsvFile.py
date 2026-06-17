@@ -17,6 +17,10 @@ VECTORS_TO_EXTRACT = {
     "srtt",
     "mbytesInFlight",
     "retransmissionRate",
+    "holBlockedBytes",
+    "metaExpectedDsn",
+    "metaArrivedDsnStart",
+    "metaDsnGapBytes",
     "queueLength",
     "queueBitLength",
     "queueingTime",
@@ -74,7 +78,7 @@ def main() -> int:
     vectors = results[results.type == "vector"]
     out_root = (
         Path(__file__).resolve().parents[2]
-        / "paperExperiments"
+        / "experiments"
         / "experiment2"
         / "csvs"
         / protocol

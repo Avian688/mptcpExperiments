@@ -36,7 +36,7 @@ SIM_ROOT = SCRIPT_DIR.parents[1]
 PROJECT_ROOT = SIM_ROOT.parent
 SAMPLES_ROOT = PROJECT_ROOT.parent
 REPO_ROOT = SAMPLES_ROOT.parent
-EXPERIMENT_DIR = SIM_ROOT / "paperExperiments" / "experiment1"
+EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment1"
 RESULTS_DIR = EXPERIMENT_DIR / "results"
 LOG_DIR = SIM_ROOT / "logs" / "experiment1"
 
@@ -62,7 +62,7 @@ def parse_args() -> argparse.Namespace:
         default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(2.5 * 60 * 60))),
     )
     parser.add_argument("--sim-time-limit", help="Optional OMNeT++ sim-time-limit override, e.g. 5s.")
-    parser.add_argument("--start-step", type=int, default=2, help="1=simulate, 2=export, 3=extract, 4=plot")
+    parser.add_argument("--start-step", type=int, default=1, help="1=simulate, 2=export, 3=extract, 4=plot")
     parser.add_argument("--end-step", type=int, default=4)
     parser.add_argument("--resume", action="store_true", help="Skip simulations with existing vector output.")
     parser.add_argument("--clean", action="store_true", help="Remove experiment1 results/csvs/plots before running.")

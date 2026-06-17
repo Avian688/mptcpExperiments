@@ -41,6 +41,8 @@ class SeriesBundle:
     user_goodput: dict[str, pd.Series]
     subflows: dict[str, list[pd.Series]]
     queues: dict[int, pd.Series]
+    hol_blocked: dict[str, pd.Series | None]
+    dsn_gap: dict[str, pd.Series | None]
 
 
 def read_series(path: Path, column: str) -> pd.Series | None:
@@ -57,6 +59,12 @@ def resample_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
     if series is None or series.empty:
         return pd.Series(np.zeros_like(grid), index=grid)
     return series.reindex(series.index.union(grid)).interpolate(method="index").reindex(grid).fillna(0)
+
+
+def sample_hold_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
+    if series is None or series.empty:
+        return pd.Series(np.zeros_like(grid), index=grid)
+    return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
 
 
 def conn_id(path: Path) -> int:
@@ -79,11 +87,28 @@ def load_subflows(run_root: Path, server_index: int) -> list[pd.Series]:
     return series[:4]
 
 
+def load_connection_series(run_root: Path, server_index: int, metric: str) -> pd.Series | None:
+    prefix = f"sharedleopaths.server[{server_index}].tcp.conn-"
+    paths = [
+        path
+        for path in run_root.glob(f"*/{metric}.csv")
+        if path.parent.name.startswith(prefix)
+    ]
+    candidates = [
+        series
+        for path in sorted(paths, key=conn_id)
+        if (series := read_series(path, metric)) is not None and not series.empty
+    ]
+    return max(candidates, key=len) if candidates else None
+
+
 def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> SeriesBundle | None:
     run_root = csv_root / protocol / f"run{run}"
     user_goodput: dict[str, pd.Series] = {}
     subflows: dict[str, list[pd.Series]] = {}
     queues: dict[int, pd.Series] = {}
+    hol_blocked: dict[str, pd.Series | None] = {}
+    dsn_gap: dict[str, pd.Series | None] = {}
 
     for user_label, server_index, _paths in USERS:
         app_path = run_root / f"sharedleopaths.server[{server_index}].app[0]" / "goodput.csv"
@@ -93,6 +118,8 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> SeriesBu
             return None
         user_goodput[user_label] = app_goodput
         subflows[user_label] = load_subflows(run_root, server_index)
+        hol_blocked[user_label] = load_connection_series(run_root, server_index, "holBlockedBytes")
+        dsn_gap[user_label] = load_connection_series(run_root, server_index, "metaDsnGapBytes")
 
     for path_index, module in PATH_QUEUE_MODULES.items():
         queue = read_series(run_root / module / "queueLength.csv", "queueLength")
@@ -101,18 +128,23 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> SeriesBu
         else:
             print(f"warning: missing path {path_index} queueLength for {label}")
 
-    return SeriesBundle(protocol, label, user_goodput, subflows, queues)
+    return SeriesBundle(protocol, label, user_goodput, subflows, queues, hol_blocked, dsn_gap)
 
 
 def common_grid(bundles: list[SeriesBundle]) -> np.ndarray:
     starts = []
     ends = []
     for bundle in bundles:
-        all_series = list(bundle.user_goodput.values()) + list(bundle.queues.values())
+        all_series = (
+            list(bundle.user_goodput.values())
+            + list(bundle.queues.values())
+            + list(bundle.hol_blocked.values())
+            + list(bundle.dsn_gap.values())
+        )
         for subflow_list in bundle.subflows.values():
             all_series.extend(subflow_list)
-        starts.extend(float(series.index.min()) for series in all_series if not series.empty)
-        ends.extend(float(series.index.max()) for series in all_series if not series.empty)
+        starts.extend(float(series.index.min()) for series in all_series if series is not None and not series.empty)
+        ends.extend(float(series.index.max()) for series in all_series if series is not None and not series.empty)
     if not starts or not ends:
         return np.asarray([])
     return np.arange(max(min(starts), 0.0), max(ends) + 0.5, 0.5)
@@ -217,6 +249,42 @@ def save_jain_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path)
     plt.close()
 
 
+def save_hol_blocked_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+    fig, axes = plt.subplots(len(bundles), 1, figsize=(10, 6), sharex=True, sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, bundle in zip(axes, bundles):
+        for user_label, _server_index, paths in USERS:
+            series = sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid) / 1024
+            ax.plot(grid, series, label=f"user {user_label} ({paths})")
+        ax.set_title(bundle.label)
+        ax.set_ylabel("HoL blocked (KiB)")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+    axes[-1].set_xlabel("Time (s)")
+    fig.suptitle("Receiver HoL-Blocked Bytes")
+    fig.tight_layout()
+    fig.savefig(out_dir / "hol_blocked_bytes_timeseries.pdf")
+    plt.close(fig)
+
+
+def save_dsn_gap_plot(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+    fig, axes = plt.subplots(len(bundles), 1, figsize=(10, 6), sharex=True, sharey=True)
+    axes = np.atleast_1d(axes)
+    for ax, bundle in zip(axes, bundles):
+        for user_label, _server_index, paths in USERS:
+            series = sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid) / 1024
+            ax.plot(grid, series, label=f"user {user_label} ({paths})")
+        ax.set_title(bundle.label)
+        ax.set_ylabel("DSN gap (KiB)")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+    axes[-1].set_xlabel("Time (s)")
+    fig.suptitle("Receiver DSN Gap")
+    fig.tight_layout()
+    fig.savefig(out_dir / "dsn_gap_timeseries.pdf")
+    plt.close(fig)
+
+
 def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, final_window: float) -> None:
     rows = []
     window_start = max(float(grid.max()) - final_window, float(grid.min())) if len(grid) else 0.0
@@ -226,9 +294,18 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
         for user_label, _server_index, _paths in USERS:
             mean_mbps = final_window_mean(resample_to_grid(bundle.user_goodput[user_label], grid) / 1e6, window_start)
             row[f"user_{user_label}_goodput_mbps"] = mean_mbps
+            row[f"user_{user_label}_hol_blocked_kib"] = final_window_mean(
+                sample_hold_to_grid(bundle.hol_blocked.get(user_label), grid) / 1024,
+                window_start,
+            )
+            row[f"user_{user_label}_dsn_gap_kib"] = final_window_mean(
+                sample_hold_to_grid(bundle.dsn_gap.get(user_label), grid) / 1024,
+                window_start,
+            )
             user_means.append(mean_mbps)
         row["jain_fairness"] = jain(np.asarray(user_means))
         row["a_vs_mean_ratio"] = user_means[0] / float(np.mean(user_means)) if np.mean(user_means) > 0 else 0.0
+        row["a_vs_bc_mean_ratio"] = user_means[0] / float(np.mean(user_means[1:])) if np.mean(user_means[1:]) > 0 else 0.0
         rows.append(row)
 
     summary = pd.DataFrame(rows)
@@ -237,7 +314,7 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
     labels = summary["label"].tolist()
     x = np.arange(len(summary))
     width = 0.22
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
     for offset, user_label in zip((-width, 0, width), ("A", "B", "C")):
         axes[0].bar(x + offset, summary[f"user_{user_label}_goodput_mbps"], width, label=f"user {user_label}")
     axes[0].set_title("Final-Window Per-User Goodput")
@@ -252,6 +329,12 @@ def save_summary(bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path, f
     axes[1].set_xticks(x, labels, rotation=20, ha="right")
     axes[1].grid(True, axis="y", alpha=0.3)
 
+    axes[2].bar(x, summary["a_vs_bc_mean_ratio"])
+    axes[2].set_title("User A / Mean(B,C)")
+    axes[2].set_ylim(0, 1.1)
+    axes[2].set_xticks(x, labels, rotation=20, ha="right")
+    axes[2].grid(True, axis="y", alpha=0.3)
+
     fig.tight_layout()
     fig.savefig(out_dir / "summary_final_window.pdf")
     plt.close(fig)
@@ -264,7 +347,7 @@ def main() -> int:
     args = parser.parse_args()
 
     sim_root = Path(__file__).resolve().parents[2]
-    experiment_root = sim_root / "paperExperiments" / "experiment2"
+    experiment_root = sim_root / "experiments" / "experiment2"
     csv_root = experiment_root / "csvs"
     out_dir = sim_root / "plots" / "experiment2"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -287,6 +370,8 @@ def main() -> int:
     save_subflow_plot(bundles, grid, out_dir)
     save_queue_plot(bundles, grid, out_dir)
     save_jain_plot(bundles, grid, out_dir)
+    save_hol_blocked_plot(bundles, grid, out_dir)
+    save_dsn_gap_plot(bundles, grid, out_dir)
     save_summary(bundles, grid, out_dir, args.final_window)
     print(f"wrote plots and summary under {out_dir}")
     return 0
