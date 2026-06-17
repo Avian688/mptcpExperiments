@@ -31,7 +31,7 @@ SIM_ROOT = SCRIPT_DIR.parents[1]
 PROJECT_ROOT = SIM_ROOT.parent
 SAMPLES_ROOT = PROJECT_ROOT.parent
 REPO_ROOT = SAMPLES_ROOT.parent
-EXPERIMENT_DIR = SIM_ROOT / "paperExperiments" / "experiment2"
+EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment2"
 RESULTS_DIR = EXPERIMENT_DIR / "results"
 LOG_DIR = SIM_ROOT / "logs" / "experiment2"
 

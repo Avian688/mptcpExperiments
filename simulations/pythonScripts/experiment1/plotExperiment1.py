@@ -185,7 +185,7 @@ def main() -> int:
     args = parser.parse_args()
 
     sim_root = Path(__file__).resolve().parents[2]
-    experiment_root = sim_root / "paperExperiments" / "experiment1"
+    experiment_root = sim_root / "experiments" / "experiment1"
     csv_root = experiment_root / "csvs"
     out_dir = sim_root / "plots" / "experiment1"
     out_dir.mkdir(parents=True, exist_ok=True)

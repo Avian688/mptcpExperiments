@@ -75,7 +75,7 @@ def main() -> int:
     vectors = results[results.type == "vector"]
     out_root = (
         Path(__file__).resolve().parents[2]
-        / "paperExperiments"
+        / "experiments"
         / "experiment1"
         / "csvs"
         / protocol
