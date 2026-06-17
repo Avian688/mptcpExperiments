@@ -15,12 +15,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [
-    ("CubicDefault", "cubic", "default"),
-    ("CubicLowestRtt", "cubic", "lowestRtt"),
-    ("CubicDirectPull", "cubic", "directPull"),
-    ("MpOrbDefault", "mporb", "default"),
-    ("MpOrbLowestRtt", "mporb", "lowestRtt"),
-    ("MpOrbDirectPull", "mporb", "directPull"),
+    ("CubicDefault", "cubic", "default", "experiment1_cubic.ini"),
+    ("CubicLowestRtt", "cubic", "lowestRtt", "experiment1_cubic.ini"),
+    ("CubicDirectPull", "cubic", "directPull", "experiment1_cubic.ini"),
+    ("MpOrbDefault", "mporb", "default", "experiment1_mporb.ini"),
+    ("MpOrbLowestRtt", "mporb", "lowestRtt", "experiment1_mporb.ini"),
+    ("MpOrbDirectPull", "mporb", "directPull", "experiment1_mporb.ini"),
 ]
 
 DEFAULT_RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
@@ -28,9 +28,10 @@ DEFAULT_RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
 
 @dataclass(frozen=True)
 class Entry:
-    config: str
+    config_prefix: str
     protocol: str
     scheduler: str
+    ini_name: str
     variable_rtt_ms: int
     run: int = 1
 
@@ -39,8 +40,12 @@ class Entry:
         return f"{self.variable_rtt_ms}ms"
 
     @property
+    def config(self) -> str:
+        return f"{self.config_prefix}_{self.variant}"
+
+    @property
     def result_base(self) -> str:
-        return f"{self.config}_{self.variant}"
+        return self.config
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -80,6 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end-step", type=int, default=4)
     parser.add_argument("--resume", action="store_true", help="Skip simulations with existing vector output.")
     parser.add_argument("--clean", action="store_true", help="Remove experiment1 results/csvs/plots before running.")
+    parser.add_argument("--skip-generate", action="store_true", help="Do not refresh generated INI/XML inputs first.")
     parser.add_argument("--configs", nargs="*", default=[entry[0] for entry in CONFIGS])
     parser.add_argument("--rtts-ms", nargs="*", type=int, default=DEFAULT_RTT_SWEEP_MS)
     return parser.parse_args()
@@ -160,15 +166,12 @@ def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
         "-u",
         "Cmdenv",
         "-f",
-        "experiment1.ini",
+        entry.ini_name,
         "-c",
         entry.config,
         "-n",
         common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
-        f"--**.variablePathRtt={entry.variable_rtt_ms}ms",
-        f"--output-vector-file=results/{entry.result_base}-#0.vec",
-        f"--output-scalar-file=results/{entry.result_base}-#0.sca",
     ]
     for lib in load_libs():
         cmd.extend(["-l", lib])
@@ -218,6 +221,26 @@ def terminate_all_active_processes() -> None:
 def handle_termination_signal(signum, _frame) -> None:
     print(f"\nReceived signal {signum}; cancelling experiment runner...", file=sys.stderr)
     raise KeyboardInterrupt
+
+
+def run_checked(command: list[str], cwd: Path, description: str) -> None:
+    print(description)
+    result = subprocess.run(command, cwd=str(cwd))
+    if result.returncode != 0:
+        raise RuntimeError(f"{description} failed with exit code {result.returncode}")
+
+
+def generate_inputs() -> None:
+    run_checked(
+        [sys.executable, "generateExperiment1Scenarios.py"],
+        SCRIPT_DIR,
+        "Generating experiment 1 scenarios",
+    )
+    run_checked(
+        [sys.executable, "generateExperiment1IniFile.py"],
+        SCRIPT_DIR,
+        "Generating experiment 1 ini files",
+    )
 
 
 def run_logged_command(
@@ -358,6 +381,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_termination_signal)
     args = parse_args()
     try:
+        if not args.skip_generate:
+            generate_inputs()
+
         selected = entries(args)
         if not selected:
             print("no matching configs selected")

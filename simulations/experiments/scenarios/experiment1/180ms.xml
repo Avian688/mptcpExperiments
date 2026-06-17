@@ -1,0 +1,31 @@
+<scenario>
+    <at t="0">
+        <!-- Path 0: fixed 20 ms RTT / 10 Mbps bottleneck. -->
+        <set-channel-param src-module="client[0]" src-gate="pppg$o[0]" par="delay" value="5ms"/>
+        <set-channel-param src-module="router1a" src-gate="pppg$o[0]" par="delay" value="5ms"/>
+        <set-channel-param src-module="router2a" src-gate="pppg$o[0]" par="delay" value="5ms"/>
+        <set-channel-param src-module="server[0]" src-gate="pppg$o[0]" par="delay" value="5ms"/>
+        <set-channel-param src-module="router1a" src-gate="pppg$o[1]" par="datarate" value="10Mbps"/>
+        <set-channel-param src-module="router2a" src-gate="pppg$o[1]" par="datarate" value="10Mbps"/>
+
+        <!-- Path 1: swept 180 ms RTT / 100 Mbps bottleneck. -->
+        <set-channel-param src-module="client[0]" src-gate="pppg$o[1]" par="delay" value="45ms"/>
+        <set-channel-param src-module="router1b" src-gate="pppg$o[0]" par="delay" value="45ms"/>
+        <set-channel-param src-module="router2b" src-gate="pppg$o[0]" par="delay" value="45ms"/>
+        <set-channel-param src-module="server[0]" src-gate="pppg$o[1]" par="delay" value="45ms"/>
+        <set-channel-param src-module="router1b" src-gate="pppg$o[1]" par="datarate" value="100Mbps"/>
+        <set-channel-param src-module="router2b" src-gate="pppg$o[1]" par="datarate" value="100Mbps"/>
+
+        <!-- Keep access links out of the bottleneck. -->
+        <set-channel-param src-module="client[0]" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="client[0]" src-gate="pppg$o[1]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="router1a" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="router1b" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="router2a" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="router2b" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="server[0]" src-gate="pppg$o[0]" par="datarate" value="10Gbps"/>
+        <set-channel-param src-module="server[0]" src-gate="pppg$o[1]" par="datarate" value="10Gbps"/>
+
+        <update module="configurator"/>
+    </at>
+</scenario>

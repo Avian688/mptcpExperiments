@@ -53,14 +53,14 @@ network schedulernegativetwopaths
     connections:
         for i=0..sizeof(client)-1 {
             // Path 0: fixed RTT and bottleneck.
-            client[i].pppg++ <--> DatarateChannel { delay = fixedPathRtt / 4; datarate = 10Gbps; } <--> router1a.pppg++;
-            router2a.pppg++ <--> DatarateChannel { delay = fixedPathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
+            client[i].pppg++ <--> DatarateChannel { delay = parent.fixedPathRtt / 4; datarate = 10Gbps; } <--> router1a.pppg++;
+            router2a.pppg++ <--> DatarateChannel { delay = parent.fixedPathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
 
             // Path 1: variable RTT and bottleneck.
-            client[i].pppg++ <--> DatarateChannel { delay = variablePathRtt / 4; datarate = 10Gbps; } <--> router1b.pppg++;
-            router2b.pppg++ <--> DatarateChannel { delay = variablePathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
+            client[i].pppg++ <--> DatarateChannel { delay = parent.variablePathRtt / 4; datarate = 10Gbps; } <--> router1b.pppg++;
+            router2b.pppg++ <--> DatarateChannel { delay = parent.variablePathRtt / 4; datarate = 10Gbps; } <--> server[i].pppg++;
         }
 
-        router1a.pppg++ <--> DatarateChannel { delay = 0ms; datarate = fixedPathDatarate; } <--> router2a.pppg++;
-        router1b.pppg++ <--> DatarateChannel { delay = 0ms; datarate = variablePathDatarate; } <--> router2b.pppg++;
+        router1a.pppg++ <--> DatarateChannel { delay = 0ms; datarate = parent.fixedPathDatarate; } <--> router2a.pppg++;
+        router1b.pppg++ <--> DatarateChannel { delay = 0ms; datarate = parent.variablePathDatarate; } <--> router2b.pppg++;
 }
