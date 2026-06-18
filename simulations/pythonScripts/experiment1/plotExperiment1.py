@@ -14,10 +14,8 @@ import pandas as pd
 CONFIGS = [
     ("cubic", "default", "CUBIC default"),
     ("cubic", "lowestRtt", "CUBIC lowestRTT"),
-    ("cubic", "directPull", "CUBIC directPull"),
     ("mporb", "default", "MPORB default"),
     ("mporb", "lowestRtt", "MPORB lowestRTT"),
-    ("mporb", "directPull", "MPORB directPull"),
 ]
 
 NETWORK = "schedulernegativetwopaths"

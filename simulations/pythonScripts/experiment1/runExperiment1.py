@@ -17,10 +17,8 @@ from pathlib import Path
 CONFIGS = [
     ("CubicDefault", "cubic", "default", "experiment1_cubic.ini"),
     ("CubicLowestRtt", "cubic", "lowestRtt", "experiment1_cubic.ini"),
-    ("CubicDirectPull", "cubic", "directPull", "experiment1_cubic.ini"),
     ("MpOrbDefault", "mporb", "default", "experiment1_mporb.ini"),
     ("MpOrbLowestRtt", "mporb", "lowestRtt", "experiment1_mporb.ini"),
-    ("MpOrbDirectPull", "mporb", "directPull", "experiment1_mporb.ini"),
 ]
 
 DEFAULT_RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]

@@ -16,7 +16,6 @@ VARIABLE_PATH_DATARATE = f"{VARIABLE_PATH_DATARATE_MBPS}Mbps"
 SCHEDULERS = [
     ("Default", "default"),
     ("LowestRtt", "lowestRtt"),
-    ("DirectPull", "directPull"),
 ]
 
 PROTOCOLS = {
