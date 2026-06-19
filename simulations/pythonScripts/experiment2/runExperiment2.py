@@ -15,8 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [
-    ("CubicUncoupled", "cubic"),
-    ("MpOrbUncoupled", "mporb"),
+    ("CubicUncoupled", "cubic", "experiment2_cubic.ini"),
+    ("MpOrbUncoupled", "mporb", "experiment2_mporb.ini"),
+    ("OliaCoupled", "olia", "experiment2_olia.ini"),
+    ("BaliaCoupled", "balia", "experiment2_balia.ini"),
 ]
 
 
@@ -24,6 +26,7 @@ CONFIGS = [
 class Entry:
     config: str
     protocol: str
+    ini_file: str
     run: int = 1
 
 
@@ -142,7 +145,7 @@ def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
         "-u",
         "Cmdenv",
         "-f",
-        "experiment2.ini",
+        entry.ini_file,
         "-c",
         entry.config,
         "-n",
