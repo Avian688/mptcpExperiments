@@ -138,6 +138,8 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.throughput:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.cwnd:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.retransmissionRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.**.queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.**.queue.queueLength.result-recording-modes = vector(removeRepeats)",

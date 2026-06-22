@@ -149,6 +149,8 @@ def write_common_general(w) -> None:
         "**.**.tcp.conn-*.metaExpectedDsn:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaArrivedDsnStart:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaDsnGapBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.**.queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.**.queue.queueLength.result-recording-modes = vector(removeRepeats)",

@@ -103,12 +103,12 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> Bundle |
     return Bundle(protocol, label, user_goodput, subflow_throughput, subflow_cwnd, queues)
 
 
-def resample(series: pd.Series | None, grid: np.ndarray, sample_hold: bool = False) -> pd.Series:
+def resample(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
     if series is None or series.empty:
         return pd.Series(np.zeros_like(grid), index=grid)
-    expanded = series.reindex(series.index.union(grid)).sort_index()
-    expanded = expanded.ffill() if sample_hold else expanded.interpolate(method="index")
-    return expanded.reindex(grid).fillna(0)
+    # Experiment vectors use vector(removeRepeats), so omitted samples retain
+    # the previous value until the next recorded change.
+    return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
 
 
 def common_grid(bundles: list[Bundle]) -> np.ndarray:
@@ -140,6 +140,11 @@ def jain(values: np.ndarray) -> float:
     return float(np.sum(values) ** 2 / denominator) if denominator > 0 else 0.0
 
 
+def last_positive_time(series: pd.Series) -> float | None:
+    positive = series[series > 0]
+    return float(positive.index.max()) if not positive.empty else None
+
+
 def jain_timeseries(bundle: Bundle, grid: np.ndarray) -> pd.Series:
     matrix = np.vstack([resample(bundle.user_goodput[user], grid).to_numpy() for user, _index, _paths in USERS])
     return pd.Series([jain(matrix[:, index]) for index in range(matrix.shape[1])], index=grid)
@@ -159,22 +164,47 @@ def build_summary(bundles: list[Bundle], final_window: float) -> pd.DataFrame:
         if len(grid) == 0:
             continue
         window_start = max(float(grid.max()) - final_window, float(grid.min()))
-        row = {"protocol": bundle.protocol, "label": bundle.label}
-        goodputs = []
+        analysis_end = float(grid.max())
+        row = {
+            "protocol": bundle.protocol,
+            "label": bundle.label,
+            "analysis_end_time_s": analysis_end,
+            "final_window_start_time_s": window_start,
+        }
+        final_goodputs = []
+        run_goodputs = []
         for user, _index, _paths in USERS:
-            goodput = final_mean(resample(bundle.user_goodput[user], grid) / 1e6, window_start)
-            row[f"user_{user}_goodput_mbps"] = goodput
+            app_goodput = resample(bundle.user_goodput[user], grid)
+            final_goodput = final_mean(app_goodput / 1e6, window_start)
+            run_goodput = float(app_goodput.mean() / 1e6) if not app_goodput.empty else 0.0
+            last_delivery_time = last_positive_time(app_goodput)
+            row[f"user_{user}_goodput_mbps"] = final_goodput
+            row[f"user_{user}_run_average_goodput_mbps"] = run_goodput
+            row[f"user_{user}_last_positive_goodput_time_s"] = last_delivery_time
+            row[f"user_{user}_delivery_stall_duration_s"] = (
+                max(analysis_end - last_delivery_time, 0.0) if last_delivery_time is not None else None
+            )
             row[f"user_{user}_total_cwnd_packets"] = final_mean(
                 total_series(bundle.subflow_cwnd[user], grid, MSS_BYTES), window_start
             )
-            goodputs.append(goodput)
-        aggregate = float(np.sum(goodputs))
+            final_goodputs.append(final_goodput)
+            run_goodputs.append(run_goodput)
+        aggregate = float(np.sum(final_goodputs))
+        run_aggregate = float(np.sum(run_goodputs))
         row["aggregate_goodput_mbps"] = aggregate
-        row["jain_fairness"] = jain(np.asarray(goodputs))
-        row["a_vs_bc_mean_ratio"] = goodputs[0] / float(np.mean(goodputs[1:])) if np.mean(goodputs[1:]) > 0 else 0.0
+        row["run_average_aggregate_goodput_mbps"] = run_aggregate
+        row["jain_fairness"] = jain(np.asarray(final_goodputs))
+        row["run_average_jain_fairness"] = jain(np.asarray(run_goodputs))
+        row["a_vs_bc_mean_ratio"] = (
+            final_goodputs[0] / float(np.mean(final_goodputs[1:])) if np.mean(final_goodputs[1:]) > 0 else 0.0
+        )
+        row["run_average_a_vs_bc_mean_ratio"] = (
+            run_goodputs[0] / float(np.mean(run_goodputs[1:])) if np.mean(run_goodputs[1:]) > 0 else 0.0
+        )
         row["aggregate_path_utilization"] = aggregate / TOTAL_PATH_CAPACITY_MBPS
+        row["run_average_aggregate_path_utilization"] = run_aggregate / TOTAL_PATH_CAPACITY_MBPS
         for path in PATH_QUEUE_MODULES:
-            row[f"path_{path}_queue_packets"] = final_mean(resample(bundle.queues[path], grid, True), window_start)
+            row[f"path_{path}_queue_packets"] = final_mean(resample(bundle.queues[path], grid), window_start)
         row["shared_queue_packets"] = float(np.mean([row[f"path_{path}_queue_packets"] for path in range(1, 5)]))
         row["private_queue_packets"] = float(np.mean([row[f"path_{path}_queue_packets"] for path in range(5, 9)]))
         rows.append(row)
@@ -246,7 +276,7 @@ def save_queue_timeseries(bundles: list[Bundle], grid: np.ndarray, out_dir: Path
     for ax, bundle in zip(axes, bundles):
         for path in PATH_QUEUE_MODULES:
             kind = "shared" if path <= 4 else "private"
-            ax.plot(grid, resample(bundle.queues[path], grid, True), label=f"path {path} ({kind})")
+            ax.plot(grid, resample(bundle.queues[path], grid), label=f"path {path} ({kind})")
         ax.set_title(bundle.label)
         ax.set_ylabel("Packets")
         ax.grid(True, alpha=0.3)
@@ -297,15 +327,63 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     fig.savefig(out_dir / "fairness_and_goodput_summary.pdf")
     plt.close(fig)
 
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
+    for offset, user in zip((-width, 0, width), ("A", "B", "C")):
+        axes[0].bar(
+            x + offset,
+            summary[f"user_{user}_run_average_goodput_mbps"],
+            width,
+            label=f"connection {user}",
+        )
+    axes[0].set_title("Whole-Run Per-Connection Goodput")
+    axes[0].set_ylabel("Mbps")
+    axes[0].legend(fontsize=8)
+    axes[1].bar(x, summary["run_average_jain_fairness"])
+    axes[1].set_title("Whole-Run Jain Fairness")
+    axes[1].set_ylim(0.75, 1.01)
+    axes[2].bar(x, summary["run_average_a_vs_bc_mean_ratio"])
+    axes[2].axhline(1.0, color="black", linestyle="--", linewidth=1)
+    axes[2].set_title("Whole-Run A / Mean(B,C)")
+    for ax in axes:
+        ax.set_xticks(x, labels, rotation=20, ha="right")
+        ax.grid(True, axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "whole_run_fairness_and_goodput_summary.pdf")
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(10, 4.5))
+    for offset, user in zip((-width, 0, width), ("A", "B", "C")):
+        ax.bar(
+            x + offset,
+            summary[f"user_{user}_last_positive_goodput_time_s"],
+            width,
+            label=f"connection {user}",
+        )
+    ax.set_title("Application Delivery Cutoff")
+    ax.set_ylabel("Last positive app-goodput sample (s)")
+    ax.set_xticks(x, labels, rotation=20, ha="right")
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(out_dir / "app_delivery_cutoff_summary.pdf")
+    plt.close(fig)
+
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     axes[0].bar(x - width / 2, summary["shared_queue_packets"], width, label="shared paths 1-4")
     axes[0].bar(x + width / 2, summary["private_queue_packets"], width, label="private paths 5-8")
     axes[0].set_title("Mean Queue Occupancy")
     axes[0].set_ylabel("Packets")
     axes[0].legend(fontsize=8)
-    axes[1].bar(x, summary["aggregate_goodput_mbps"])
+    axes[1].bar(x - width / 2, summary["aggregate_goodput_mbps"], width, label="final window")
+    axes[1].bar(
+        x + width / 2,
+        summary["run_average_aggregate_goodput_mbps"],
+        width,
+        label="whole run",
+    )
     axes[1].set_title("Aggregate Goodput")
     axes[1].set_ylabel("Mbps")
+    axes[1].legend(fontsize=8)
     for ax in axes:
         ax.set_xticks(x, labels, rotation=20, ha="right")
         ax.grid(True, axis="y", alpha=0.3)

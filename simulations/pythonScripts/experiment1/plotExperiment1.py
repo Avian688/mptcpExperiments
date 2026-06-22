@@ -33,6 +33,8 @@ class SeriesBundle:
     subflows: list[pd.Series]
     hol_blocked: pd.Series | None
     dsn_gap: pd.Series | None
+    reinjected_bytes: pd.Series | None
+    reinjections: pd.Series | None
 
 
 def parse_variant_rtt_ms(variant: str) -> int | None:
@@ -53,7 +55,9 @@ def read_series(path: Path, column: str) -> pd.Series | None:
 def resample_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
     if series is None or series.empty:
         return pd.Series(np.zeros_like(grid), index=grid)
-    return series.reindex(series.index.union(grid)).interpolate(method="index").reindex(grid).fillna(0)
+    # These rate vectors are recorded with vector(removeRepeats), so omitted
+    # samples retain the previous value rather than varying linearly.
+    return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
 
 
 def sample_hold_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
@@ -62,18 +66,18 @@ def sample_hold_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series
     return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
 
 
-def connection_metric_paths(run_root: Path, metric: str) -> list[Path]:
+def connection_metric_paths(run_root: Path, metric: str, endpoint: str = "server") -> list[Path]:
     return sorted(
         path
         for path in run_root.glob(f"*/{metric}.csv")
-        if f"{NETWORK}.server[0].tcp.conn" in path.parent.name
+        if f"{NETWORK}.{endpoint}[0].tcp.conn" in path.parent.name
     )
 
 
-def read_connection_series(run_root: Path, metric: str) -> pd.Series | None:
+def read_connection_series(run_root: Path, metric: str, endpoint: str = "server") -> pd.Series | None:
     candidates = [
         series
-        for path in connection_metric_paths(run_root, metric)
+        for path in connection_metric_paths(run_root, metric, endpoint)
         if (series := read_series(path, metric)) is not None and not series.empty
     ]
     return max(candidates, key=len) if candidates else None
@@ -111,6 +115,8 @@ def load_bundle(csv_root: Path, protocol: str, scheduler: str, label: str, varia
         subflows=subflows,
         hol_blocked=read_connection_series(run_root, "holBlockedBytes"),
         dsn_gap=read_connection_series(run_root, "metaDsnGapBytes"),
+        reinjected_bytes=read_connection_series(run_root, "metaReinjectedBytes", "client"),
+        reinjections=read_connection_series(run_root, "metaReinjections", "client"),
     )
 
 
@@ -132,7 +138,14 @@ def common_grid(bundles: list[SeriesBundle]) -> np.ndarray:
     starts = []
     ends = []
     for bundle in bundles:
-        all_series = [bundle.app_goodput, *bundle.subflows, bundle.hol_blocked, bundle.dsn_gap]
+        all_series = [
+            bundle.app_goodput,
+            *bundle.subflows,
+            bundle.hol_blocked,
+            bundle.dsn_gap,
+            bundle.reinjected_bytes,
+            bundle.reinjections,
+        ]
         starts.extend(float(series.index.min()) for series in all_series if series is not None and not series.empty)
         ends.extend(float(series.index.max()) for series in all_series if series is not None and not series.empty)
     if not starts or not ends:
@@ -158,6 +171,11 @@ def p95(series: pd.Series) -> float:
     return float(series.quantile(0.95)) if not series.empty else 0.0
 
 
+def last_positive_time(series: pd.Series) -> float | None:
+    positive = series[series > 0]
+    return float(positive.index.max()) if not positive.empty else None
+
+
 def bytes_to_packets(series: pd.Series) -> pd.Series:
     return series / MSS_BYTES
 
@@ -165,10 +183,13 @@ def bytes_to_packets(series: pd.Series) -> pd.Series:
 def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float) -> dict[str, float | int | str | None]:
     window_start = max(float(grid.max()) - final_window, float(grid.min())) if len(grid) else 0.0
     app = resample_to_grid(bundle.app_goodput, grid)
+    last_delivery_time = last_positive_time(app)
     subflow_total = aggregate_subflows(bundle, grid)
     hol_gap = (subflow_total - app).clip(lower=0)
     hol = bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid))
     dsn_gap = bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid))
+    reinjected = bytes_to_packets(sample_hold_to_grid(bundle.reinjected_bytes, grid))
+    reinjections = sample_hold_to_grid(bundle.reinjections, grid)
 
     row: dict[str, float | int | str | None] = {
         "variant": bundle.variant,
@@ -177,6 +198,11 @@ def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float
         "scheduler": bundle.scheduler,
         "label": bundle.label,
         "app_goodput_mbps": window_mean(app / 1e6, window_start),
+        "run_average_app_goodput_mbps": float(app.mean() / 1e6) if not app.empty else 0.0,
+        "last_positive_app_goodput_time_s": last_delivery_time,
+        "app_delivery_stall_duration_s": (
+            max(float(grid.max()) - last_delivery_time, 0.0) if last_delivery_time is not None and len(grid) else None
+        ),
         "subflow_sum_mbps": window_mean(subflow_total / 1e6, window_start),
         "hol_gap_mbps": window_mean(hol_gap / 1e6, window_start),
         "hol_blocked_packets": window_mean(hol, window_start),
@@ -186,6 +212,8 @@ def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float
         "hol_blocked_fraction": float((hol > 0).mean()) if not hol.empty else 0.0,
         "max_dsn_gap_packets": float(dsn_gap.max()) if not dsn_gap.empty else 0.0,
         "p95_dsn_gap_packets": p95(dsn_gap),
+        "meta_reinjected_packets": float(reinjected.iloc[-1]) if not reinjected.empty else 0.0,
+        "meta_reinjections": float(reinjections.iloc[-1]) if not reinjections.empty else 0.0,
     }
     for index, series in enumerate(bundle.subflows, start=1):
         row[f"subflow_{index}_mbps"] = window_mean(resample_to_grid(series, grid) / 1e6, window_start)
@@ -229,14 +257,16 @@ def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: n
 
 
 def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
-    fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
     for bundle in bundles:
         axes[0].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid)), label=bundle.label)
         axes[1].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid)), label=bundle.label)
+        axes[2].plot(grid, sample_hold_to_grid(bundle.reinjections, grid), label=bundle.label)
     axes[0].set_ylabel("HoL blocked (MSS packets)")
     axes[0].set_title(f"Receiver HoL, {variant}")
     axes[1].set_ylabel("DSN gap (MSS packets)")
-    axes[1].set_xlabel("Time (s)")
+    axes[2].set_ylabel("Meta reinjections")
+    axes[2].set_xlabel("Time (s)")
     for ax in axes:
         ax.grid(True, alpha=0.3)
         ax.legend(ncol=2, fontsize=8)
@@ -296,6 +326,20 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     )
     plot_summary_lines(
         summary,
+        "run_average_app_goodput_mbps",
+        "Whole-run app goodput (Mbps)",
+        "Whole-Run Application Goodput vs Variable Path RTT",
+        aggregate_dir / "run_average_goodput_vs_rtt.pdf",
+    )
+    plot_summary_lines(
+        summary,
+        "last_positive_app_goodput_time_s",
+        "Last positive app-goodput sample (s)",
+        "Application Delivery Cutoff vs Variable Path RTT",
+        aggregate_dir / "app_delivery_cutoff_vs_rtt.pdf",
+    )
+    plot_summary_lines(
+        summary,
         "max_hol_blocked_packets",
         "Max HoL-blocked data (MSS packets)",
         "Peak Receiver HoL vs Variable Path RTT",
@@ -321,6 +365,13 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
         "Max DSN gap (MSS packets)",
         "Peak DSN Gap vs Variable Path RTT",
         aggregate_dir / "max_dsn_gap_vs_rtt.pdf",
+    )
+    plot_summary_lines(
+        summary,
+        "meta_reinjections",
+        "Cumulative meta reinjections",
+        "MPTCP Meta Reinjections vs Variable Path RTT",
+        aggregate_dir / "meta_reinjections_vs_rtt.pdf",
     )
 
 

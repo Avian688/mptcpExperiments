@@ -21,6 +21,8 @@ VECTORS_TO_EXTRACT = {
     "metaExpectedDsn",
     "metaArrivedDsnStart",
     "metaDsnGapBytes",
+    "metaReinjectedBytes",
+    "metaReinjections",
     "queueLength",
     "queueBitLength",
     "queueingTime",
