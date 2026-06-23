@@ -20,14 +20,19 @@ CONFIGS = [
     ("OliaCoupled", "olia", "experiment2_olia.ini"),
     ("BaliaCoupled", "balia", "experiment2_balia.ini"),
 ]
+DEFAULT_RUNS = 5
 
 
 @dataclass(frozen=True)
 class Entry:
-    config: str
+    config_prefix: str
     protocol: str
     ini_file: str
     run: int = 1
+
+    @property
+    def config(self) -> str:
+        return f"{self.config_prefix}_Run{self.run}"
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -67,7 +72,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end-step", type=int, default=4)
     parser.add_argument("--resume", action="store_true", help="Skip simulations with existing vector/scalar output.")
     parser.add_argument("--clean", action="store_true", help="Remove experiment2 results/csvs/plots before running.")
+    parser.add_argument("--skip-generate", action="store_true", help="Do not refresh generated INI inputs first.")
     parser.add_argument("--configs", nargs="*", default=[entry[0] for entry in CONFIGS])
+    parser.add_argument("--runs", type=int, default=int(os.environ.get("EXPERIMENT_RUNS", str(DEFAULT_RUNS))))
     return parser.parse_args()
 
 
@@ -77,7 +84,7 @@ def enabled(step: int, args: argparse.Namespace) -> bool:
 
 def entries(args: argparse.Namespace) -> list[Entry]:
     wanted = set(args.configs)
-    return [Entry(*item) for item in CONFIGS if item[0] in wanted]
+    return [Entry(*item, run=run) for item in CONFIGS if item[0] in wanted for run in range(1, args.runs + 1)]
 
 
 def common_ned_path() -> str:
@@ -255,6 +262,21 @@ def reached_time_limit_before_cleanup(log_path: Path) -> bool:
     return "Simulation time limit reached" in text and "Calling finish() at end of Run" in text
 
 
+def run_checked(command: list[str], cwd: Path, description: str) -> None:
+    print(description)
+    result = subprocess.run(command, cwd=str(cwd))
+    if result.returncode != 0:
+        raise RuntimeError(f"{description} failed with exit code {result.returncode}")
+
+
+def generate_inputs() -> None:
+    run_checked(
+        [sys.executable, "generateExperiment2IniFiles.py"],
+        SCRIPT_DIR,
+        "Generating experiment 2 ini files",
+    )
+
+
 def nonempty(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
@@ -371,6 +393,9 @@ def main() -> int:
     signal.signal(signal.SIGTERM, handle_termination_signal)
     args = parse_args()
     try:
+        if not args.skip_generate:
+            generate_inputs()
+
         selected = entries(args)
         if not selected:
             print("no matching configs selected")
@@ -388,7 +413,12 @@ def main() -> int:
         if enabled(3, args):
             run_parallel("Extracting metric CSVs", extract_csv, selected, args)
         if enabled(4, args):
-            command = [sys.executable, str(SCRIPT_DIR / "plotExperiment2.py")]
+            command = [
+                sys.executable,
+                str(SCRIPT_DIR / "plotExperiment2.py"),
+                "--runs",
+                *[str(run) for run in range(1, args.runs + 1)],
+            ]
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
             if result.returncode != 0:
                 return result.returncode

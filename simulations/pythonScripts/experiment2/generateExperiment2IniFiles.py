@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import math
+import random
 from pathlib import Path
 
 MSS_BYTES = 1448
 PATH_MBPS = 100
 PATH_RTT_MS = 60
+RUNS = range(1, 6)
+START_RANDOM_WINDOW_S = 5.0
+START_RANDOM_SEED = 2999
 
 PROTOCOLS = {
     "cubic": {
@@ -43,6 +47,11 @@ EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment2"
 
 def bdp_packets() -> int:
     return math.ceil(PATH_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
+
+
+def flow_start_times(run: int, count: int) -> list[float]:
+    rng = random.Random(START_RANDOM_SEED + run)
+    return [rng.uniform(0.0, START_RANDOM_WINDOW_S) for _ in range(count)]
 
 
 def common_ned_path_line() -> str:
@@ -89,6 +98,7 @@ def write_common_general(write) -> None:
         "# A uses paths 1-4; B uses 1,2,5,6; C uses 3,4,7,8.",
         "# All three connections have four subflows.",
         "# All eight paths are 60 ms / 100 Mbps with one-BDP (518 packet) queues.",
+        f"# Run configs start all three users uniformly in the first {START_RANDOM_WINDOW_S:g} seconds.",
         "**.numberOfClientServers = 3",
         "**.numberOfSubflows = 4",
         "**.startAllSubflowsAtBeginning = true",
@@ -156,15 +166,15 @@ def write_common_general(write) -> None:
 def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> None:
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
+    write('**.ppp[*].queue.typename = "DropTailQueue"')
+    write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         write("# ORBCC requires INT telemetry on every forward bottleneck.")
-        write("# Keep these specific assignments before the broad DropTail fallback.")
+        write("# Keep these specific assignments after the broad DropTail fallback.")
         for path in range(4):
             write(f'**.router1[{path}].ppp[2].queue.typename = "IntQueue"')
         for path in range(4, 8):
             write(f'**.router1[{path}].ppp[1].queue.typename = "IntQueue"')
-    write('**.ppp[*].queue.typename = "DropTailQueue"')
-    write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
@@ -173,11 +183,16 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write()
 
 
-def write_config(write, settings: dict[str, str]) -> None:
-    config = settings["config"]
+def write_config(write, settings: dict[str, str], run: int) -> None:
+    config = f'{settings["config"]}_Run{run}'
+    start_times = flow_start_times(run, 3)
     write(f"[Config {config}]")
     write("extends = General")
-    write(f'description = "{settings["description"]}; equal path RTT/capacity, four subflows per connection."')
+    write(f'description = "{settings["description"]}; equal path RTT/capacity, four subflows per connection, run {run}."')
+    write(f"seed-set = {run}")
+    for user, start_time in enumerate(start_times):
+        write(f"*.client[{user}].app[0].tOpen = {start_time:.6f}s")
+        write(f"*.client[{user}].app[0].tSend = {start_time:.6f}s")
     write(f'output-vector-file = "results/{config}-#0.vec"')
     write(f'output-scalar-file = "results/{config}-#0.sca"')
     write()
@@ -197,7 +212,8 @@ def main() -> None:
 
             write_common_general(write)
             write_protocol_settings(write, protocol, settings)
-            write_config(write, settings)
+            for run in RUNS:
+                write_config(write, settings, run)
         print(f"Generated {out_path}.")
 
 

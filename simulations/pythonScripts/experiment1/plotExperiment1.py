@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,10 +22,12 @@ CONFIGS = [
 
 NETWORK = "schedulernegativetwopaths"
 MSS_BYTES = 1448
+DEFAULT_RUNS = [1, 2, 3, 4, 5]
 
 
 @dataclass
 class SeriesBundle:
+    run: int
     protocol: str
     scheduler: str
     label: str
@@ -50,14 +54,6 @@ def read_series(path: Path, column: str) -> pd.Series | None:
         return None
     series = pd.Series(df[column].to_numpy(dtype=float), index=df["time"].to_numpy(dtype=float))
     return series[~series.index.duplicated(keep="last")].sort_index()
-
-
-def resample_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
-    if series is None or series.empty:
-        return pd.Series(np.zeros_like(grid), index=grid)
-    # These rate vectors are recorded with vector(removeRepeats), so omitted
-    # samples retain the previous value rather than varying linearly.
-    return series.reindex(series.index.union(grid)).sort_index().ffill().reindex(grid).fillna(0)
 
 
 def sample_hold_to_grid(series: pd.Series | None, grid: np.ndarray) -> pd.Series:
@@ -95,7 +91,7 @@ def load_bundle(csv_root: Path, protocol: str, scheduler: str, label: str, varia
     app_path = run_root / f"{NETWORK}.server[0].app[0]" / "goodput.csv"
     app_goodput = read_series(app_path, "goodput")
     if app_goodput is None:
-        print(f"warning: missing app goodput for {label} {variant}: {app_path}")
+        print(f"warning: missing app goodput for {label} {variant} run{run}: {app_path}")
         return None
 
     subflows = [
@@ -106,6 +102,7 @@ def load_bundle(csv_root: Path, protocol: str, scheduler: str, label: str, varia
     subflows = sorted(subflows, key=lambda s: float(s.mean()) if not s.empty else 0.0, reverse=True)[:2]
 
     return SeriesBundle(
+        run=run,
         protocol=protocol,
         scheduler=scheduler,
         label=label,
@@ -120,16 +117,16 @@ def load_bundle(csv_root: Path, protocol: str, scheduler: str, label: str, varia
     )
 
 
-def discover_variants(csv_root: Path, run: int) -> list[str]:
+def discover_variants(csv_root: Path, runs: list[int]) -> list[str]:
     variants: set[str] = set()
     for protocol, scheduler, _label in CONFIGS:
         root = csv_root / protocol / scheduler
         if not root.exists():
             continue
         for child in root.iterdir():
-            if child.is_dir() and (child / f"run{run}").is_dir():
+            if child.is_dir() and any((child / f"run{run}").is_dir() for run in runs):
                 variants.add(child.name)
-        if (root / f"run{run}").is_dir():
+        if any((root / f"run{run}").is_dir() for run in runs):
             variants.add("single")
     return sorted(variants, key=lambda item: (parse_variant_rtt_ms(item) is None, parse_variant_rtt_ms(item) or 0, item))
 
@@ -156,7 +153,7 @@ def common_grid(bundles: list[SeriesBundle]) -> np.ndarray:
 def aggregate_subflows(bundle: SeriesBundle, grid: np.ndarray) -> pd.Series:
     total = pd.Series(np.zeros_like(grid), index=grid)
     for series in bundle.subflows:
-        total = total.add(resample_to_grid(series, grid), fill_value=0)
+        total = total.add(sample_hold_to_grid(series, grid), fill_value=0)
     return total
 
 
@@ -180,9 +177,26 @@ def bytes_to_packets(series: pd.Series) -> pd.Series:
     return series / MSS_BYTES
 
 
-def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float) -> dict[str, float | int | str | None]:
-    window_start = max(float(grid.max()) - final_window, float(grid.min())) if len(grid) else 0.0
-    app = resample_to_grid(bundle.app_goodput, grid)
+def series_stats(series_list: list[pd.Series | None], grid: np.ndarray) -> tuple[pd.Series, pd.Series]:
+    sampled = [sample_hold_to_grid(series, grid).to_numpy(dtype=float) for series in series_list if series is not None]
+    if not sampled:
+        zeros = pd.Series(np.zeros_like(grid), index=grid)
+        return zeros, zeros
+    matrix = np.vstack(sampled)
+    return pd.Series(matrix.mean(axis=0), index=grid), pd.Series(matrix.std(axis=0), index=grid)
+
+
+def summarize_bundle(
+    bundle: SeriesBundle,
+    final_window: float,
+    analysis_start: float,
+) -> dict[str, float | int | str | None]:
+    grid = common_grid([bundle])
+    if len(grid) == 0:
+        return {}
+
+    final_window_start = max(float(grid.max()) - final_window, float(grid.min()))
+    app = sample_hold_to_grid(bundle.app_goodput, grid)
     last_delivery_time = last_positive_time(app)
     subflow_total = aggregate_subflows(bundle, grid)
     hol_gap = (subflow_total - app).clip(lower=0)
@@ -194,19 +208,23 @@ def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float
     row: dict[str, float | int | str | None] = {
         "variant": bundle.variant,
         "variable_rtt_ms": bundle.variable_rtt_ms,
+        "run": bundle.run,
         "protocol": bundle.protocol,
         "scheduler": bundle.scheduler,
         "label": bundle.label,
-        "app_goodput_mbps": window_mean(app / 1e6, window_start),
-        "run_average_app_goodput_mbps": float(app.mean() / 1e6) if not app.empty else 0.0,
+        "analysis_start_time_s": analysis_start,
+        "analysis_end_time_s": float(grid.max()),
+        "final_window_start_time_s": final_window_start,
+        "app_goodput_mbps": window_mean(app / 1e6, final_window_start),
+        "run_average_app_goodput_mbps": window_mean(app / 1e6, analysis_start),
         "last_positive_app_goodput_time_s": last_delivery_time,
         "app_delivery_stall_duration_s": (
-            max(float(grid.max()) - last_delivery_time, 0.0) if last_delivery_time is not None and len(grid) else None
+            max(float(grid.max()) - last_delivery_time, 0.0) if last_delivery_time is not None else None
         ),
-        "subflow_sum_mbps": window_mean(subflow_total / 1e6, window_start),
-        "hol_gap_mbps": window_mean(hol_gap / 1e6, window_start),
-        "hol_blocked_packets": window_mean(hol, window_start),
-        "dsn_gap_packets": window_mean(dsn_gap, window_start),
+        "subflow_sum_mbps": window_mean(subflow_total / 1e6, final_window_start),
+        "hol_gap_mbps": window_mean(hol_gap / 1e6, final_window_start),
+        "hol_blocked_packets": window_mean(hol, final_window_start),
+        "dsn_gap_packets": window_mean(dsn_gap, final_window_start),
         "max_hol_blocked_packets": float(hol.max()) if not hol.empty else 0.0,
         "p95_hol_blocked_packets": p95(hol),
         "hol_blocked_fraction": float((hol > 0).mean()) if not hol.empty else 0.0,
@@ -216,14 +234,44 @@ def summarize_bundle(bundle: SeriesBundle, grid: np.ndarray, final_window: float
         "meta_reinjections": float(reinjections.iloc[-1]) if not reinjections.empty else 0.0,
     }
     for index, series in enumerate(bundle.subflows, start=1):
-        row[f"subflow_{index}_mbps"] = window_mean(resample_to_grid(series, grid) / 1e6, window_start)
+        row[f"subflow_{index}_mbps"] = window_mean(sample_hold_to_grid(series, grid) / 1e6, final_window_start)
     return row
+
+
+def aggregate_summary(run_summary: pd.DataFrame) -> pd.DataFrame:
+    key_cols = ["variant", "variable_rtt_ms", "protocol", "scheduler", "label"]
+    numeric_cols = [
+        column
+        for column in run_summary.select_dtypes(include=[np.number]).columns
+        if column not in {"run", "variable_rtt_ms"}
+    ]
+    rows = []
+    for keys, group in run_summary.groupby(key_cols, dropna=False, sort=False):
+        row = dict(zip(key_cols, keys))
+        row["run_count"] = int(group["run"].nunique())
+        for column in numeric_cols:
+            values = group[column].dropna().astype(float)
+            row[column] = float(values.mean()) if not values.empty else np.nan
+            row[f"{column}_std"] = float(values.std(ddof=0)) if not values.empty else np.nan
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values(["variable_rtt_ms", "protocol", "scheduler"], na_position="last")
+
+
+def grouped_by_config(bundles: list[SeriesBundle]) -> list[tuple[str, list[SeriesBundle]]]:
+    grouped: dict[str, list[SeriesBundle]] = defaultdict(list)
+    for bundle in bundles:
+        grouped[bundle.label].append(bundle)
+    return [(label, grouped[label]) for _protocol, _scheduler, label in CONFIGS if label in grouped]
 
 
 def save_variant_goodput_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
     plt.figure(figsize=(10, 5))
-    for bundle in bundles:
-        plt.plot(grid, resample_to_grid(bundle.app_goodput, grid) / 1e6, label=bundle.label)
+    for label, group in grouped_by_config(bundles):
+        mean, std = series_stats([bundle.app_goodput for bundle in group], grid)
+        mean_mbps = mean / 1e6
+        std_mbps = std / 1e6
+        plt.plot(grid, mean_mbps, label=f"{label} (n={len(group)})")
+        plt.fill_between(grid, mean_mbps - std_mbps, mean_mbps + std_mbps, alpha=0.18)
     plt.xlabel("Time (s)")
     plt.ylabel("Application goodput (Mbps)")
     plt.title(f"Application Goodput, {variant}")
@@ -235,16 +283,25 @@ def save_variant_goodput_plot(variant: str, bundles: list[SeriesBundle], grid: n
 
 
 def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
-    rows = int(np.ceil(len(bundles) / 2))
+    groups = grouped_by_config(bundles)
+    rows = int(np.ceil(len(groups) / 2))
     fig, axes = plt.subplots(rows, 2, figsize=(11, max(4, rows * 2.8)), sharex=True, sharey=True)
     axes = np.asarray(axes).reshape(rows, 2)
-    for ax, bundle in zip(axes.flat, bundles):
-        for index, series in enumerate(bundle.subflows, start=1):
-            ax.plot(grid, resample_to_grid(series, grid) / 1e6, label=f"subflow {index}")
-        ax.set_title(bundle.label)
+    for ax, (label, group) in zip(axes.flat, groups):
+        max_subflows = max((len(bundle.subflows) for bundle in group), default=0)
+        for index in range(max_subflows):
+            mean, std = series_stats(
+                [bundle.subflows[index] if index < len(bundle.subflows) else None for bundle in group],
+                grid,
+            )
+            mean_mbps = mean / 1e6
+            std_mbps = std / 1e6
+            ax.plot(grid, mean_mbps, label=f"subflow {index + 1}")
+            ax.fill_between(grid, mean_mbps - std_mbps, mean_mbps + std_mbps, alpha=0.16)
+        ax.set_title(f"{label} (n={len(group)})")
         ax.grid(True, alpha=0.3)
         ax.legend(fontsize=8)
-    for ax in axes.flat[len(bundles):]:
+    for ax in axes.flat[len(groups):]:
         ax.axis("off")
     for ax in axes[-1, :]:
         ax.set_xlabel("Time (s)")
@@ -258,14 +315,25 @@ def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: n
 
 def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
     fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
-    for bundle in bundles:
-        axes[0].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid)), label=bundle.label)
-        axes[1].plot(grid, bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid)), label=bundle.label)
-        axes[2].plot(grid, sample_hold_to_grid(bundle.reinjections, grid), label=bundle.label)
-    axes[0].set_ylabel("HoL blocked (MSS packets)")
+    for label, group in grouped_by_config(bundles):
+        hol_mean, hol_std = series_stats(
+            [bytes_to_packets(sample_hold_to_grid(bundle.hol_blocked, grid)) for bundle in group],
+            grid,
+        )
+        dsn_mean, dsn_std = series_stats(
+            [bytes_to_packets(sample_hold_to_grid(bundle.dsn_gap, grid)) for bundle in group],
+            grid,
+        )
+        reinj_mean, reinj_std = series_stats([bundle.reinjections for bundle in group], grid)
+        for ax, mean, std, y_label in (
+            (axes[0], hol_mean, hol_std, "HoL blocked (MSS packets)"),
+            (axes[1], dsn_mean, dsn_std, "DSN gap (MSS packets)"),
+            (axes[2], reinj_mean, reinj_std, "Meta reinjections"),
+        ):
+            ax.plot(grid, mean, label=f"{label} (n={len(group)})")
+            ax.fill_between(grid, mean - std, mean + std, alpha=0.16)
+            ax.set_ylabel(y_label)
     axes[0].set_title(f"Receiver HoL, {variant}")
-    axes[1].set_ylabel("DSN gap (MSS packets)")
-    axes[2].set_ylabel("Meta reinjections")
     axes[2].set_xlabel("Time (s)")
     for ax in axes:
         ax.grid(True, alpha=0.3)
@@ -275,7 +343,13 @@ def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.nd
     plt.close(fig)
 
 
-def save_variant_plots(variant: str, bundles: list[SeriesBundle], out_root: Path, final_window: float) -> list[dict[str, float | int | str | None]]:
+def save_variant_plots(
+    variant: str,
+    bundles: list[SeriesBundle],
+    out_root: Path,
+    final_window: float,
+    analysis_start: float,
+) -> list[dict[str, float | int | str | None]]:
     out_dir = out_root / "by_rtt" / variant
     out_dir.mkdir(parents=True, exist_ok=True)
     grid = common_grid(bundles)
@@ -286,8 +360,10 @@ def save_variant_plots(variant: str, bundles: list[SeriesBundle], out_root: Path
     save_variant_subflow_plot(variant, bundles, grid, out_dir)
     save_variant_hol_plot(variant, bundles, grid, out_dir)
 
-    rows = [summarize_bundle(bundle, grid, final_window) for bundle in bundles]
-    pd.DataFrame(rows).to_csv(out_dir / "summary_final_window.csv", index=False)
+    rows = [summarize_bundle(bundle, final_window, analysis_start) for bundle in bundles]
+    rows = [row for row in rows if row]
+    pd.DataFrame(rows).to_csv(out_dir / "summary_runs_final_window.csv", index=False)
+    aggregate_summary(pd.DataFrame(rows)).to_csv(out_dir / "summary_final_window.csv", index=False)
     return rows
 
 
@@ -300,7 +376,17 @@ def plot_summary_lines(summary: pd.DataFrame, metric: str, ylabel: str, title: s
         subset = data[(data["protocol"] == protocol) & (data["scheduler"] == scheduler)].sort_values("variable_rtt_ms")
         if subset.empty:
             continue
-        plt.plot(subset["variable_rtt_ms"], subset[metric], marker="o", label=label)
+        yerr = subset[f"{metric}_std"] if f"{metric}_std" in subset.columns else None
+        plt.errorbar(
+            subset["variable_rtt_ms"],
+            subset[metric],
+            yerr=yerr,
+            marker="o",
+            capsize=3,
+            linewidth=1.2,
+            elinewidth=0.9,
+            label=label,
+        )
     plt.xlabel("Variable path RTT (ms)")
     plt.ylabel(ylabel)
     plt.title(title)
@@ -311,10 +397,12 @@ def plot_summary_lines(summary: pd.DataFrame, metric: str, ylabel: str, title: s
     plt.close()
 
 
-def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
+def save_aggregate_plots(run_summary: pd.DataFrame, summary: pd.DataFrame, out_dir: Path) -> None:
     aggregate_dir = out_dir / "aggregate"
     aggregate_dir.mkdir(parents=True, exist_ok=True)
+    run_summary.to_csv(aggregate_dir / "summary_runs_by_rtt.csv", index=False)
     summary.to_csv(aggregate_dir / "summary_by_rtt.csv", index=False)
+    run_summary.to_csv(out_dir / "summary_runs_final_window.csv", index=False)
     summary.to_csv(out_dir / "summary_final_window.csv", index=False)
 
     plot_summary_lines(
@@ -327,8 +415,8 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     plot_summary_lines(
         summary,
         "run_average_app_goodput_mbps",
-        "Whole-run app goodput (Mbps)",
-        "Whole-Run Application Goodput vs Variable Path RTT",
+        "Post-join app goodput (Mbps)",
+        "Post-Join Application Goodput vs Variable Path RTT",
         aggregate_dir / "run_average_goodput_vs_rtt.pdf",
     )
     plot_summary_lines(
@@ -375,19 +463,36 @@ def save_aggregate_plots(summary: pd.DataFrame, out_dir: Path) -> None:
     )
 
 
+def selected_runs(args: argparse.Namespace) -> list[int]:
+    if args.run is not None:
+        return [args.run]
+    if args.runs:
+        return sorted(set(args.runs))
+    return DEFAULT_RUNS
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Plot mptcpExperiments experiment 1.")
-    parser.add_argument("--run", type=int, default=1)
+    parser.add_argument("--run", type=int, help="Plot one run only.")
+    parser.add_argument("--runs", nargs="*", type=int, help="Runs to aggregate; default is 1 2 3 4 5.")
     parser.add_argument("--final-window", type=float, default=60.0)
+    parser.add_argument(
+        "--analysis-start",
+        type=float,
+        default=10.0,
+        help="Start time for post-join run averages. Defaults to 10s, after the 0-5s random join window.",
+    )
     args = parser.parse_args()
+    runs = selected_runs(args)
 
     sim_root = Path(__file__).resolve().parents[2]
     experiment_root = sim_root / "experiments" / "experiment1"
     csv_root = experiment_root / "csvs"
     out_dir = sim_root / "plots" / "experiment1"
+    shutil.rmtree(out_dir, ignore_errors=True)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    variants = discover_variants(csv_root, args.run)
+    variants = discover_variants(csv_root, runs)
     if not variants:
         print(f"no extracted CSV data found under {csv_root}")
         return 1
@@ -396,21 +501,24 @@ def main() -> int:
     for variant in variants:
         bundles = [
             bundle
+            for run in runs
             for protocol, scheduler, label in CONFIGS
-            if (bundle := load_bundle(csv_root, protocol, scheduler, label, variant, args.run)) is not None
+            if (bundle := load_bundle(csv_root, protocol, scheduler, label, variant, run)) is not None
         ]
         if not bundles:
             continue
-        summary_rows.extend(save_variant_plots(variant, bundles, out_dir, args.final_window))
+        summary_rows.extend(save_variant_plots(variant, bundles, out_dir, args.final_window, args.analysis_start))
 
     if not summary_rows:
         print(f"no usable timeseries data found under {csv_root}")
         return 1
 
-    summary = pd.DataFrame(summary_rows)
-    save_aggregate_plots(summary, out_dir)
+    run_summary = pd.DataFrame(summary_rows)
+    summary = aggregate_summary(run_summary)
+    save_aggregate_plots(run_summary, summary, out_dir)
     print(f"wrote aggregate plots under {out_dir / 'aggregate'}")
     print(f"wrote per-RTT plots under {out_dir / 'by_rtt'}")
+    print(f"aggregated runs: {', '.join(str(run) for run in runs)}")
     return 0
 
 

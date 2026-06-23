@@ -22,6 +22,7 @@ CONFIGS = [
 ]
 
 DEFAULT_RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
+DEFAULT_RUNS = 5
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ class Entry:
 
     @property
     def config(self) -> str:
-        return f"{self.config_prefix}_{self.variant}"
+        return f"{self.config_prefix}_{self.variant}_Run{self.run}"
 
     @property
     def result_base(self) -> str:
@@ -86,6 +87,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--skip-generate", action="store_true", help="Do not refresh generated INI/XML inputs first.")
     parser.add_argument("--configs", nargs="*", default=[entry[0] for entry in CONFIGS])
     parser.add_argument("--rtts-ms", nargs="*", type=int, default=DEFAULT_RTT_SWEEP_MS)
+    parser.add_argument("--runs", type=int, default=int(os.environ.get("EXPERIMENT_RUNS", str(DEFAULT_RUNS))))
     return parser.parse_args()
 
 
@@ -96,7 +98,14 @@ def enabled(step: int, args: argparse.Namespace) -> bool:
 def entries(args: argparse.Namespace) -> list[Entry]:
     wanted = set(args.configs)
     rtts = sorted(set(args.rtts_ms))
-    return [Entry(*item, variable_rtt_ms=rtt) for item in CONFIGS if item[0] in wanted for rtt in rtts]
+    runs = range(1, args.runs + 1)
+    return [
+        Entry(*item, variable_rtt_ms=rtt, run=run)
+        for item in CONFIGS
+        if item[0] in wanted
+        for rtt in rtts
+        for run in runs
+    ]
 
 
 def common_ned_path() -> str:
@@ -421,7 +430,12 @@ def main() -> int:
         if enabled(3, args):
             run_parallel("Extracting metric CSVs", extract_csv, selected, args)
         if enabled(4, args):
-            command = [sys.executable, str(SCRIPT_DIR / "plotExperiment1.py")]
+            command = [
+                sys.executable,
+                str(SCRIPT_DIR / "plotExperiment1.py"),
+                "--runs",
+                *[str(run) for run in range(1, args.runs + 1)],
+            ]
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
             if result.returncode != 0:
                 return result.returncode

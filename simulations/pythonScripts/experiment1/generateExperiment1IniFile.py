@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import math
+import random
 from pathlib import Path
 
 RTT_SWEEP_MS = [20, 40, 60, 80, 100, 120, 140, 160, 180]
+RUNS = range(1, 6)
+START_RANDOM_WINDOW_S = 5.0
+START_RANDOM_SEED = 1999
 MSS_BYTES = 1448
 FIXED_PATH_RTT_MS = 20
 FIXED_PATH_DATARATE_MBPS = 10
@@ -47,6 +51,10 @@ def queue_packets_for(variable_rtt_ms: int) -> int:
     variable = (variable_rtt_ms, bdp_packets(VARIABLE_PATH_DATARATE_MBPS, variable_rtt_ms))
     higher_rtt = max(fixed[0], variable[0])
     return max(packets for rtt_ms, packets in (fixed, variable) if rtt_ms == higher_rtt)
+
+
+def flow_start_time(run: int) -> float:
+    return random.Random(START_RANDOM_SEED + run).uniform(0.0, START_RANDOM_WINDOW_S)
 
 
 def common_ned_path_line() -> str:
@@ -94,6 +102,7 @@ def write_common_general(w) -> None:
         "# Path 1 is swept from 20 ms to 180 ms RTT at 100 Mbps.",
         "# Each config sets queue capacity to the BDP of that run's higher-RTT path.",
         "# Example: 100 Mbps * 180 ms = ceil(18,000,000 / (1448 * 8)) = 1554 packets.",
+        f"# Run configs start the MPTCP flow uniformly in the first {START_RANDOM_WINDOW_S:g} seconds.",
         "**.numberOfClientServers = 1",
         "**.numberOfSubflows = 2",
         "**.startAllSubflowsAtBeginning = true",
@@ -167,13 +176,13 @@ def write_common_general(w) -> None:
 def write_protocol_general(w, protocol: str, settings: dict[str, str]) -> None:
     w(f'**.tcp.typename = "{settings["tcp_type"]}"')
     w(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
-    if protocol == "mporb":
-        w("# ORBCC needs IntQueue on the forward bottlenecks to append INT queue telemetry.")
-        w("# Keep these before the broad DropTail fallback so the specific queues are created as IntQueue.")
-        w('**.router1a.ppp[1].queue.typename = "IntQueue"')
-        w('**.router1b.ppp[1].queue.typename = "IntQueue"')
     w('**.ppp[*].queue.typename = "DropTailQueue"')
     w('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
+    if protocol == "mporb":
+        w("# ORBCC needs IntQueue on the forward bottlenecks to append INT queue telemetry.")
+        w("# Keep these after the broad DropTail fallback because ini assignments are applied sequentially.")
+        w('**.router1a.ppp[1].queue.typename = "IntQueue"')
+        w('**.router1b.ppp[1].queue.typename = "IntQueue"')
     if protocol == "mporb":
         w("**.additiveIncreasePercent = 0.05")
         w("**.eta = 0.95")
@@ -182,13 +191,17 @@ def write_protocol_general(w, protocol: str, settings: dict[str, str]) -> None:
     w()
 
 
-def write_config(w, settings: dict[str, str], scheduler_title: str, scheduler_mode: str, rtt_ms: int) -> None:
-    config_name = f"{settings['title']}{scheduler_title}_{rtt_ms}ms"
+def write_config(w, settings: dict[str, str], scheduler_title: str, scheduler_mode: str, rtt_ms: int, run: int) -> None:
+    config_name = f"{settings['title']}{scheduler_title}_{rtt_ms}ms_Run{run}"
+    start_time = flow_start_time(run)
     w(f"[Config {config_name}]")
     w("extends = General")
-    w(f'description = "{settings["description"]}, {scheduler_mode} scheduler, variable path {rtt_ms} ms RTT."')
+    w(f'description = "{settings["description"]}, {scheduler_mode} scheduler, variable path {rtt_ms} ms RTT, run {run}."')
+    w(f"seed-set = {run}")
     w(f'**.schedulerMode = "{scheduler_mode}"')
     w(f"**.variablePathRtt = {rtt_ms}ms")
+    w(f"*.client[0].app[0].tOpen = {start_time:.6f}s")
+    w(f"*.client[0].app[0].tSend = {start_time:.6f}s")
     w(f"# Queue = BDP of the higher-RTT path for this config.")
     w(f"**.ppp[*].queue.packetCapacity = {queue_packets_for(rtt_ms)}")
     w(f'*.scenarioManager.script = xmldoc("../scenarios/experiment1/{rtt_ms}ms.xml")')
@@ -209,7 +222,8 @@ def main() -> None:
             write_protocol_general(w, protocol, settings)
             for scheduler_title, scheduler_mode in SCHEDULERS:
                 for rtt_ms in RTT_SWEEP_MS:
-                    write_config(w, settings, scheduler_title, scheduler_mode, rtt_ms)
+                    for run in RUNS:
+                        write_config(w, settings, scheduler_title, scheduler_mode, rtt_ms, run)
         print(f"Generated {out_path}.")
 
 
