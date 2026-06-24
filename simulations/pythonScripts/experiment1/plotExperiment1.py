@@ -216,15 +216,20 @@ def summarize_bundle(
         "analysis_end_time_s": float(grid.max()),
         "final_window_start_time_s": final_window_start,
         "app_goodput_mbps": window_mean(app / 1e6, final_window_start),
+        "post_join_app_goodput_mbps": window_mean(app / 1e6, analysis_start),
         "run_average_app_goodput_mbps": window_mean(app / 1e6, analysis_start),
         "last_positive_app_goodput_time_s": last_delivery_time,
         "app_delivery_stall_duration_s": (
             max(float(grid.max()) - last_delivery_time, 0.0) if last_delivery_time is not None else None
         ),
         "subflow_sum_mbps": window_mean(subflow_total / 1e6, final_window_start),
+        "post_join_subflow_sum_mbps": window_mean(subflow_total / 1e6, analysis_start),
         "hol_gap_mbps": window_mean(hol_gap / 1e6, final_window_start),
+        "post_join_hol_gap_mbps": window_mean(hol_gap / 1e6, analysis_start),
         "hol_blocked_packets": window_mean(hol, final_window_start),
+        "post_join_hol_blocked_packets": window_mean(hol, analysis_start),
         "dsn_gap_packets": window_mean(dsn_gap, final_window_start),
+        "post_join_dsn_gap_packets": window_mean(dsn_gap, analysis_start),
         "max_hol_blocked_packets": float(hol.max()) if not hol.empty else 0.0,
         "p95_hol_blocked_packets": p95(hol),
         "hol_blocked_fraction": float((hol > 0).mean()) if not hol.empty else 0.0,
@@ -264,7 +269,19 @@ def grouped_by_config(bundles: list[SeriesBundle]) -> list[tuple[str, list[Serie
     return [(label, grouped[label]) for _protocol, _scheduler, label in CONFIGS if label in grouped]
 
 
-def save_variant_goodput_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+def post_join_grid(grid: np.ndarray, analysis_start: float) -> np.ndarray:
+    filtered = grid[grid >= analysis_start]
+    return filtered if len(filtered) else grid
+
+
+def save_variant_goodput_plot(
+    variant: str,
+    bundles: list[SeriesBundle],
+    grid: np.ndarray,
+    out_dir: Path,
+    analysis_start: float,
+) -> None:
+    grid = post_join_grid(grid, analysis_start)
     plt.figure(figsize=(10, 5))
     for label, group in grouped_by_config(bundles):
         mean, std = series_stats([bundle.app_goodput for bundle in group], grid)
@@ -273,16 +290,23 @@ def save_variant_goodput_plot(variant: str, bundles: list[SeriesBundle], grid: n
         plt.plot(grid, mean_mbps, label=f"{label} (n={len(group)})")
         plt.fill_between(grid, mean_mbps - std_mbps, mean_mbps + std_mbps, alpha=0.18)
     plt.xlabel("Time (s)")
-    plt.ylabel("Application goodput (Mbps)")
-    plt.title(f"Application Goodput, {variant}")
+    plt.ylabel("Goodput (Mbps)")
+    plt.title(f"Goodput, {variant}")
     plt.grid(True, alpha=0.3)
     plt.legend(ncol=2, fontsize=8)
     plt.tight_layout()
-    plt.savefig(out_dir / "aggregate_goodput_timeseries.pdf")
+    plt.savefig(out_dir / "goodput.pdf")
     plt.close()
 
 
-def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+def save_variant_subflow_plot(
+    variant: str,
+    bundles: list[SeriesBundle],
+    grid: np.ndarray,
+    out_dir: Path,
+    analysis_start: float,
+) -> None:
+    grid = post_join_grid(grid, analysis_start)
     groups = grouped_by_config(bundles)
     rows = int(np.ceil(len(groups) / 2))
     fig, axes = plt.subplots(rows, 2, figsize=(11, max(4, rows * 2.8)), sharex=True, sharey=True)
@@ -307,13 +331,20 @@ def save_variant_subflow_plot(variant: str, bundles: list[SeriesBundle], grid: n
         ax.set_xlabel("Time (s)")
     for ax in axes[:, 0]:
         ax.set_ylabel("Subflow throughput (Mbps)")
-    fig.suptitle(f"Per-Subflow Goodput Proxy, {variant}")
+    fig.suptitle(f"Subflow Goodput, {variant}")
     fig.tight_layout()
-    fig.savefig(out_dir / "per_subflow_goodput_timeseries.pdf")
+    fig.savefig(out_dir / "subflow_goodput.pdf")
     plt.close(fig)
 
 
-def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.ndarray, out_dir: Path) -> None:
+def save_variant_hol_plot(
+    variant: str,
+    bundles: list[SeriesBundle],
+    grid: np.ndarray,
+    out_dir: Path,
+    analysis_start: float,
+) -> None:
+    grid = post_join_grid(grid, analysis_start)
     fig, axes = plt.subplots(3, 1, figsize=(10, 9), sharex=True)
     for label, group in grouped_by_config(bundles):
         hol_mean, hol_std = series_stats(
@@ -333,13 +364,13 @@ def save_variant_hol_plot(variant: str, bundles: list[SeriesBundle], grid: np.nd
             ax.plot(grid, mean, label=f"{label} (n={len(group)})")
             ax.fill_between(grid, mean - std, mean + std, alpha=0.16)
             ax.set_ylabel(y_label)
-    axes[0].set_title(f"Receiver HoL, {variant}")
+    axes[0].set_title(f"HoL Blocking, {variant}")
     axes[2].set_xlabel("Time (s)")
     for ax in axes:
         ax.grid(True, alpha=0.3)
         ax.legend(ncol=2, fontsize=8)
     fig.tight_layout()
-    fig.savefig(out_dir / "hol_and_dsn_gap_timeseries.pdf")
+    fig.savefig(out_dir / "hol_blocking.pdf")
     plt.close(fig)
 
 
@@ -356,9 +387,9 @@ def save_variant_plots(
     if len(grid) == 0:
         return []
 
-    save_variant_goodput_plot(variant, bundles, grid, out_dir)
-    save_variant_subflow_plot(variant, bundles, grid, out_dir)
-    save_variant_hol_plot(variant, bundles, grid, out_dir)
+    save_variant_goodput_plot(variant, bundles, grid, out_dir, analysis_start)
+    save_variant_subflow_plot(variant, bundles, grid, out_dir, analysis_start)
+    save_variant_hol_plot(variant, bundles, grid, out_dir, analysis_start)
 
     rows = [summarize_bundle(bundle, final_window, analysis_start) for bundle in bundles]
     rows = [row for row in rows if row]
@@ -407,59 +438,24 @@ def save_aggregate_plots(run_summary: pd.DataFrame, summary: pd.DataFrame, out_d
 
     plot_summary_lines(
         summary,
-        "app_goodput_mbps",
-        "Final-window app goodput (Mbps)",
-        "Application Goodput vs Variable Path RTT",
-        aggregate_dir / "goodput_vs_rtt.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "run_average_app_goodput_mbps",
+        "post_join_app_goodput_mbps",
         "Post-join app goodput (Mbps)",
-        "Post-Join Application Goodput vs Variable Path RTT",
-        aggregate_dir / "run_average_goodput_vs_rtt.pdf",
+        "Goodput",
+        aggregate_dir / "goodput.pdf",
     )
     plot_summary_lines(
         summary,
-        "last_positive_app_goodput_time_s",
-        "Last positive app-goodput sample (s)",
-        "Application Delivery Cutoff vs Variable Path RTT",
-        aggregate_dir / "app_delivery_cutoff_vs_rtt.pdf",
+        "post_join_hol_blocked_packets",
+        "HoL blocked data (MSS packets)",
+        "HoL Blocking",
+        aggregate_dir / "hol_blocking.pdf",
     )
     plot_summary_lines(
         summary,
-        "max_hol_blocked_packets",
-        "Max HoL-blocked data (MSS packets)",
-        "Peak Receiver HoL vs Variable Path RTT",
-        aggregate_dir / "max_hol_blocked_vs_rtt.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "p95_hol_blocked_packets",
-        "P95 HoL-blocked data (MSS packets)",
-        "P95 Receiver HoL vs Variable Path RTT",
-        aggregate_dir / "p95_hol_blocked_vs_rtt.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "hol_blocked_fraction",
-        "Fraction of sampled time with HoL",
-        "HoL Time Fraction vs Variable Path RTT",
-        aggregate_dir / "hol_fraction_vs_rtt.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "max_dsn_gap_packets",
-        "Max DSN gap (MSS packets)",
-        "Peak DSN Gap vs Variable Path RTT",
-        aggregate_dir / "max_dsn_gap_vs_rtt.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "meta_reinjections",
-        "Cumulative meta reinjections",
-        "MPTCP Meta Reinjections vs Variable Path RTT",
-        aggregate_dir / "meta_reinjections_vs_rtt.pdf",
+        "post_join_dsn_gap_packets",
+        "DSN gap (MSS packets)",
+        "DSN Gap",
+        aggregate_dir / "dsn_gap.pdf",
     )
 
 

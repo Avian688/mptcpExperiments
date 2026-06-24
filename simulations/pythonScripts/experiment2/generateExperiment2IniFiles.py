@@ -166,15 +166,15 @@ def write_common_general(write) -> None:
 def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> None:
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
-    write('**.ppp[*].queue.typename = "DropTailQueue"')
-    write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         write("# ORBCC requires INT telemetry on every forward bottleneck.")
-        write("# Keep these specific assignments after the broad DropTail fallback.")
+        write("# Keep these before the broad DropTail fallback: earlier matching lines have priority in these ini files.")
         for path in range(4):
             write(f'**.router1[{path}].ppp[2].queue.typename = "IntQueue"')
         for path in range(4, 8):
             write(f'**.router1[{path}].ppp[1].queue.typename = "IntQueue"')
+    write('**.ppp[*].queue.typename = "DropTailQueue"')
+    write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
