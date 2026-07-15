@@ -1,0 +1,12 @@
+<config>
+    <interface hosts="**" address="10.x.x.x" netmask="255.x.x.x"/>
+
+    <!-- Routers and servers use shortest paths. Explicit client routes keep
+         Red y1 on X then T instead of collapsing onto y2. -->
+    <autoroute sourceHosts="xIngress xEgress tIngress tEgress blueXExit blueTExit redXExit redTExit server[*]" metric="delay"/>
+
+    <route hosts="client[0]" destination="server[0]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[0]"/>
+    <route hosts="client[0]" destination="server[0]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[0]"/>
+    <route hosts="client[1]" destination="server[1]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[1]"/>
+    <route hosts="client[1]" destination="server[1]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[1]"/>
+</config>

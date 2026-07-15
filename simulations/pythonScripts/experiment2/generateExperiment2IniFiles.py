@@ -14,17 +14,23 @@ START_RANDOM_WINDOW_S = 5.0
 START_RANDOM_SEED = 2999
 
 PROTOCOLS = {
-    "cubic": {
-        "config": "CubicUncoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpMetaCubic",
-        "description": "Uncoupled MPTCP CUBIC",
-    },
-    "mporb": {
-        "config": "MpOrbUncoupled",
+    "mporb_semicoupled_alpha": {
+        "config": "MpOrbSemiCoupledAlpha",
         "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbFlavour",
-        "description": "Uncoupled MPORB/ORBCC",
+        "algorithm_class": "MpOrbSemiCoupledAlpha",
+        "description": "MPORB Alpha rate-share coupling",
+    },
+    "mporb_semicoupled_delta": {
+        "config": "MpOrbSemiCoupledDelta",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbSemiCoupledDelta",
+        "description": "MPORB Delta squared Gamma response with Alpha budget",
+    },
+    "lia": {
+        "config": "LiaCoupled",
+        "tcp_type": "MpTcp",
+        "algorithm_class": "MpTcpLia",
+        "description": "Coupled MPTCP LIA",
     },
     "olia": {
         "config": "OliaCoupled",
@@ -47,6 +53,10 @@ EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment2"
 
 def bdp_packets() -> int:
     return math.ceil(PATH_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
+
+
+def shared_path_fair_share_packets() -> int:
+    return bdp_packets() // 2
 
 
 def flow_start_times(run: int, count: int) -> list[float]:
@@ -86,7 +96,7 @@ def write_common_general(write) -> None:
         common_ned_path_line(),
         "",
         "network = mptcpexperiments.simulations.experiments.experiment2.sharedleopaths",
-        "sim-time-limit = 120s",
+        "sim-time-limit = 40s",
         "record-eventlog = false",
         "cmdenv-express-mode = true",
         "cmdenv-event-banners = false",
@@ -138,7 +148,9 @@ def write_common_general(write) -> None:
         "**.tcp.stopOperationTimeout = 4000s",
         "**.tcp.mss = 1448",
         "**.tcp.sackSupport = true",
-        "**.tcp.initialSsthresh = 5792000",
+        f"# Enter congestion avoidance at one half-path BDP ({shared_path_fair_share_packets()} MSS).",
+        f"**.tcp.initialSsthresh = {shared_path_fair_share_packets() * MSS_BYTES}",
+        "**.tcp.sendQueueLimit = 4MiB",
         "**.schedulerMode = \"default\"",
         "",
         "**.goodputInterval = 0.5s",
@@ -147,7 +159,46 @@ def write_common_general(write) -> None:
         "**.**.goodput.result-recording-modes = vector(removeRepeats)",
         "**.**.tcp.conn-*.throughput:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.cwnd:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.cwndLimited:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.rtt:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.srtt:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.paceRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mbytesInFlight:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.ssthresh:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.lossRecovery:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.liaAlpha:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.oliaEpsilon:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.baliaAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.baliaMd:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.retransmissionRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.txRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.U:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.u:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.additiveIncrease:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.sharingFlows:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.bottleneckBandwidth:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.queueingDelay:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledConnectionRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeliveryRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledConnectionCount:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledFairRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledRelativeOpportunity:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledUtilizationSafety:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledPathWeight:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAiRateBudget:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAdjustedAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaSubflowRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaConnectionRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaBaseAiRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaAlphaAiRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaTargetShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaResponsiveness:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledDeltaAiShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledMarginalValue:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledPathPrice:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledWindowDelta:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
@@ -166,7 +217,8 @@ def write_common_general(write) -> None:
 def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> None:
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
-    if protocol == "mporb":
+    is_mporb = settings["tcp_type"] == "MpOrb"
+    if is_mporb:
         write("# ORBCC requires INT telemetry on every forward bottleneck.")
         write("# Keep these before the broad DropTail fallback: earlier matching lines have priority in these ini files.")
         for path in range(4):
@@ -175,10 +227,14 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
             write(f'**.router1[{path}].ppp[1].queue.typename = "IntQueue"')
     write('**.ppp[*].queue.typename = "DropTailQueue"')
     write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
-    if protocol == "mporb":
+    if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        write("**.alpha = 0.01")
+        if protocol in {"mporb_semicoupled_alpha", "mporb_semicoupled_delta"}:
+            write("# Zero selects OrbCC's time-normalized alpha = tau / averageRTT.")
+            write("**.alpha = 0")
+        else:
+            write("**.alpha = 0.01")
         write("**.fixedAvgRTTVal = 0")
     write()
 

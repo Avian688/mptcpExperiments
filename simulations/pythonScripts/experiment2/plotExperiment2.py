@@ -14,8 +14,9 @@ import numpy as np
 import pandas as pd
 
 PROTOCOLS = [
-    ("cubic", "Uncoupled CUBIC"),
-    ("mporb", "Uncoupled ORBCC"),
+    ("mporb_semicoupled_alpha", "Alpha"),
+    ("mporb_semicoupled_delta", "Delta"),
+    ("lia", "LIA"),
     ("olia", "OLIA"),
     ("balia", "BALIA"),
 ]
@@ -95,6 +96,13 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> Bundle |
         user_goodput[user] = goodput
         subflow_throughput[user] = load_subflows(run_root, "server", index, "throughput")
         subflow_cwnd[user] = load_subflows(run_root, "client", index, "cwnd")
+        if len(subflow_throughput[user]) != 4 or len(subflow_cwnd[user]) != 4:
+            print(
+                f"warning: incomplete {label} run{run} user {user}: "
+                f"throughput subflows={len(subflow_throughput[user])}, "
+                f"cwnd subflows={len(subflow_cwnd[user])}"
+            )
+            return None
 
     queues: dict[int, pd.Series] = {}
     for path_index, module in PATH_QUEUE_MODULES.items():
@@ -456,7 +464,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Plot mptcpExperiments experiment 2.")
     parser.add_argument("--run", type=int, help="Plot one run only.")
     parser.add_argument("--runs", nargs="*", type=int, help="Runs to aggregate; default is 1 2 3 4 5.")
-    parser.add_argument("--final-window", type=float, default=60.0)
+    parser.add_argument(
+        "--final-window",
+        type=float,
+        default=10.0,
+        help="Duration of the steady-state summary window at the end of the run. Defaults to 10s.",
+    )
     parser.add_argument(
         "--analysis-start",
         type=float,

@@ -13,31 +13,18 @@ VECTORS_TO_EXTRACT = {
     "goodput",
     "throughput",
     "cwnd",
-    "rtt",
-    "srtt",
-    "mbytesInFlight",
     "retransmissionRate",
-    "holBlockedBytes",
-    "metaExpectedDsn",
-    "metaArrivedDsnStart",
-    "metaDsnGapBytes",
-    "metaReinjectedBytes",
-    "metaReinjections",
+    "liaAlpha",
+    "oliaEpsilon",
+    "baliaAi",
+    "baliaMd",
     "semiCoupledAlphaSubflowRate",
     "semiCoupledAlphaConnectionRate",
     "semiCoupledAlphaRateShare",
-    "semiCoupledDeltaBaseAiRate",
-    "semiCoupledDeltaAlphaAiRate",
     "semiCoupledDeltaTargetShare",
     "semiCoupledDeltaRateShare",
-    "semiCoupledDeltaResponsiveness",
     "semiCoupledDeltaAiShare",
-    "semiCoupledMarginalValue",
-    "semiCoupledPathPrice",
-    "semiCoupledWindowDelta",
     "queueLength",
-    "queueBitLength",
-    "queueingTime",
 }
 
 
@@ -53,9 +40,7 @@ def parse_if_number(value: str):
 
 
 def parse_ndarray(value: str):
-    if value is None:
-        return None
-    if isinstance(value, float) and np.isnan(value):
+    if value is None or (isinstance(value, float) and np.isnan(value)):
         return None
     text = str(value).strip()
     if not text:
@@ -71,7 +56,6 @@ def vector_name(name: str) -> str:
 
 
 def clean_module_name(name: str) -> str:
-    # Server threads get unique suffixes; remove them so app-level goodput paths are stable.
     return re.sub(r"\.thread_\d+", "", name)
 
 
@@ -85,18 +69,10 @@ def write_metric(out_root: Path, module_name: str, metric: str, times, values) -
     count = min(times.size, values.size)
     out_dir = out_root / clean_module_name(module_name)
     out_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame({"time": times[:count], metric: values[:count]}).to_csv(out_dir / f"{metric}.csv", index=False)
+    pd.DataFrame({"time": times[:count], metric: values[:count]}).to_csv(
+        out_dir / f"{metric}.csv", index=False
+    )
     return True
-
-
-def print_zero_diagnostics(results: pd.DataFrame, vectors: pd.DataFrame) -> None:
-    print("wrote no vector CSV files; input summary follows")
-    print("columns:", ", ".join(str(column) for column in results.columns))
-    if "type" in results.columns:
-        print("type counts:", results["type"].astype(str).str.strip().value_counts().head(12).to_dict())
-    if not vectors.empty and "name" in vectors.columns:
-        names = sorted({vector_name(str(name)) for name in vectors["name"].dropna()})
-        print("first vector metric names:", ", ".join(names[:40]))
 
 
 def main() -> int:
@@ -107,7 +83,6 @@ def main() -> int:
     csv_path = Path(sys.argv[1])
     protocol = sys.argv[2]
     run = sys.argv[3]
-
     if not csv_path.exists():
         print(f"missing input CSV: {csv_path}")
         return 1
@@ -122,34 +97,30 @@ def main() -> int:
             "vecvalue": parse_ndarray,
         },
     )
-
     required = {"module", "name"}
     if not required.issubset(results.columns):
-        print(f"missing required columns in {csv_path}: {sorted(required - set(results.columns))}")
-        print("columns:", ", ".join(str(column) for column in results.columns))
+        print(f"missing required columns: {sorted(required - set(results.columns))}")
         return 1
 
+    vectors = results
     if "type" in results.columns:
         vectors = results[results["type"].astype(str).str.strip().str.lower().eq("vector")]
-    else:
-        vectors = results
 
     out_root = (
         Path(__file__).resolve().parents[2]
         / "experiments"
-        / "experiment2"
+        / "experiment3"
         / "csvs"
         / protocol
         / f"run{run}"
     )
-
     written = 0
     if {"vectime", "vecvalue"}.issubset(vectors.columns):
         for _, row in vectors.iterrows():
             metric = vector_name(str(row["name"]))
-            if metric not in VECTORS_TO_EXTRACT:
-                continue
-            if write_metric(out_root, str(row["module"]), metric, row["vectime"], row["vecvalue"]):
+            if metric in VECTORS_TO_EXTRACT and write_metric(
+                out_root, str(row["module"]), metric, row["vectime"], row["vecvalue"]
+            ):
                 written += 1
     elif {"time", "value"}.issubset(vectors.columns):
         for (module_name, name), group in vectors.groupby(["module", "name"], sort=False):
@@ -162,13 +133,14 @@ def main() -> int:
             if write_metric(out_root, str(module_name), metric, times[mask], values[mask]):
                 written += 1
     else:
-        print("unsupported vector CSV layout: expected vectime/vecvalue or time/value columns")
+        print("unsupported vector CSV layout: expected vectime/vecvalue or time/value")
         print("columns:", ", ".join(str(column) for column in results.columns))
         return 1
 
     print(f"wrote {written} vector CSV files under {out_root}")
     if written == 0:
-        print_zero_diagnostics(results, vectors)
+        names = sorted({vector_name(str(name)) for name in vectors["name"].dropna()})
+        print("available vector names:", ", ".join(names[:60]))
         return 1
     return 0
 

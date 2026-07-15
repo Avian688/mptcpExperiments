@@ -1,0 +1,9 @@
+<scenario>
+    <at t="120s">
+        <set-param module="backgroundClient[0].tcp" par="sendingEnabled" value="false"/>
+        <set-param module="backgroundClient[1].tcp" par="sendingEnabled" value="false"/>
+        <set-param module="backgroundClient[2].tcp" par="sendingEnabled" value="false"/>
+        <set-param module="backgroundClient[3].tcp" par="sendingEnabled" value="false"/>
+        <set-param module="backgroundClient[4].tcp" par="sendingEnabled" value="false"/>
+    </at>
+</scenario>

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import os
-import signal
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -15,18 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [
-    ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment2_mporb_semicoupled_alpha.ini"),
-    ("MpOrbSemiCoupledDelta", "mporb_semicoupled_delta", "experiment2_mporb_semicoupled_delta.ini"),
-    ("LiaCoupled", "lia", "experiment2_lia.ini"),
-    ("OliaCoupled", "olia", "experiment2_olia.ini"),
-    ("BaliaCoupled", "balia", "experiment2_balia.ini"),
-]
-DEFAULT_CONFIGS = [
-    "MpOrbSemiCoupledAlpha",
-    "MpOrbSemiCoupledDelta",
-    "LiaCoupled",
-    "OliaCoupled",
-    "BaliaCoupled",
+    ("LiaCoupled", "lia", "experiment4_lia.ini"),
+    ("OliaCoupled", "olia", "experiment4_olia.ini"),
+    ("BaliaCoupled", "balia", "experiment4_balia.ini"),
+    ("MpOrbAlpha", "mporb_alpha", "experiment4_mporb_alpha.ini"),
+    ("MpOrbDelta", "mporb_delta", "experiment4_mporb_delta.ini"),
 ]
 DEFAULT_RUNS = 5
 
@@ -36,7 +29,7 @@ class Entry:
     config_prefix: str
     protocol: str
     ini_file: str
-    run: int = 1
+    run: int
 
     @property
     def config(self) -> str:
@@ -48,26 +41,23 @@ SIM_ROOT = SCRIPT_DIR.parents[1]
 PROJECT_ROOT = SIM_ROOT.parent
 SAMPLES_ROOT = PROJECT_ROOT.parent
 REPO_ROOT = SAMPLES_ROOT.parent
-EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment2"
+EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment4"
 RESULTS_DIR = EXPERIMENT_DIR / "results"
-LOG_DIR = SIM_ROOT / "logs" / "experiment2"
+LOG_DIR = SIM_ROOT / "logs" / "experiment4"
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
 ACTIVE_PROCESSES_LOCK = threading.Lock()
 
 
 def tool_path(name: str) -> str:
-    env_name = name.upper()
-    if os.environ.get(env_name):
-        return os.environ[env_name]
+    if os.environ.get(name.upper()):
+        return os.environ[name.upper()]
     bundled = REPO_ROOT / "bin" / name
-    if bundled.exists():
-        return str(bundled)
-    return name
+    return str(bundled) if bundled.exists() else name
 
 
 def parse_args() -> argparse.Namespace:
     default_cores = max(1, int(os.environ.get("EXPERIMENT_CORES", str(os.cpu_count() or 1))))
-    parser = argparse.ArgumentParser(description="Run mptcpExperiments experiment 2.")
+    parser = argparse.ArgumentParser(description="Run mptcpExperiments experiment 4.")
     parser.add_argument("--cores", type=int, default=default_cores)
     parser.add_argument("--retries", type=int, default=int(os.environ.get("EXPERIMENT_RETRIES", "3")))
     parser.add_argument(
@@ -78,10 +68,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sim-time-limit", help="Optional OMNeT++ sim-time-limit override, e.g. 5s.")
     parser.add_argument("--start-step", type=int, default=1, help="1=simulate, 2=export, 3=extract, 4=plot")
     parser.add_argument("--end-step", type=int, default=4)
-    parser.add_argument("--resume", action="store_true", help="Skip simulations with existing vector/scalar output.")
-    parser.add_argument("--clean", action="store_true", help="Remove experiment2 results/csvs/plots before running.")
-    parser.add_argument("--skip-generate", action="store_true", help="Do not refresh generated INI inputs first.")
-    parser.add_argument("--configs", nargs="*", default=DEFAULT_CONFIGS)
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--clean", action="store_true")
+    parser.add_argument("--skip-generate", action="store_true")
+    parser.add_argument("--configs", nargs="*", default=[item[0] for item in CONFIGS])
     parser.add_argument("--runs", type=int, default=int(os.environ.get("EXPERIMENT_RUNS", str(DEFAULT_RUNS))))
     return parser.parse_args()
 
@@ -90,9 +80,14 @@ def enabled(step: int, args: argparse.Namespace) -> bool:
     return args.start_step <= step <= args.end_step
 
 
-def entries(args: argparse.Namespace) -> list[Entry]:
+def selected_entries(args: argparse.Namespace) -> list[Entry]:
     wanted = set(args.configs)
-    return [Entry(*item, run=run) for item in CONFIGS if item[0] in wanted for run in range(1, args.runs + 1)]
+    return [
+        Entry(*item, run)
+        for item in CONFIGS
+        if item[0] in wanted
+        for run in range(1, args.runs + 1)
+    ]
 
 
 def common_ned_path() -> str:
@@ -152,26 +147,21 @@ def clean_entry(entry: Entry) -> None:
 
 
 def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
-    cmd = [
+    command = [
         tool_path("opp_run"),
-        "-r",
-        "0",
+        "-r", "0",
         "-m",
-        "-u",
-        "Cmdenv",
-        "-f",
-        entry.ini_file,
-        "-c",
-        entry.config,
-        "-n",
-        common_ned_path(),
+        "-u", "Cmdenv",
+        "-f", entry.ini_file,
+        "-c", entry.config,
+        "-n", common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
     ]
-    for lib in load_libs():
-        cmd.extend(["-l", lib])
+    for library in load_libs():
+        command.extend(["-l", library])
     if args.sim_time_limit:
-        cmd.append(f"--sim-time-limit={args.sim_time_limit}")
-    return cmd
+        command.append(f"--sim-time-limit={args.sim_time_limit}")
+    return command
 
 
 def terminate_process_group(process: subprocess.Popen) -> None:
@@ -195,16 +185,6 @@ def terminate_process_group(process: subprocess.Popen) -> None:
         process.wait()
 
 
-def register_process(process: subprocess.Popen) -> None:
-    with ACTIVE_PROCESSES_LOCK:
-        ACTIVE_PROCESSES.add(process)
-
-
-def unregister_process(process: subprocess.Popen) -> None:
-    with ACTIVE_PROCESSES_LOCK:
-        ACTIVE_PROCESSES.discard(process)
-
-
 def terminate_all_active_processes() -> None:
     with ACTIVE_PROCESSES_LOCK:
         processes = list(ACTIVE_PROCESSES)
@@ -218,10 +198,7 @@ def handle_termination_signal(signum, _frame) -> None:
 
 
 def run_logged_command(
-    command: list[str],
-    cwd: Path,
-    log_path: Path,
-    timeout_seconds: float | None = None,
+    command: list[str], cwd: Path, log_path: Path, timeout_seconds: float | None = None
 ) -> tuple[int, bool]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -236,7 +213,8 @@ def run_logged_command(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        register_process(process)
+        with ACTIVE_PROCESSES_LOCK:
+            ACTIVE_PROCESSES.add(process)
         try:
             return_code = process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
@@ -245,29 +223,15 @@ def run_logged_command(
             return_code = process.returncode if process.returncode is not None else 124
         except BaseException:
             terminate_process_group(process)
-            elapsed = time.monotonic() - started
-            log.write(f"\nInterrupted after {elapsed:.2f} seconds; terminated child process group\n")
-            log.flush()
             raise
         finally:
-            unregister_process(process)
-
+            with ACTIVE_PROCESSES_LOCK:
+                ACTIVE_PROCESSES.discard(process)
         elapsed = time.monotonic() - started
         if timed_out:
             log.write(f"\nTimed out after {elapsed:.2f} seconds\n")
-        log.write(f"\nExit code: {return_code}\n")
-        log.write(f"Elapsed seconds: {elapsed:.2f}\n")
+        log.write(f"\nExit code: {return_code}\nElapsed seconds: {elapsed:.2f}\n")
     return return_code, timed_out
-
-
-def reached_time_limit_before_cleanup(log_path: Path) -> bool:
-    if not log_path.exists():
-        return False
-    try:
-        text = log_path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-    return "Simulation time limit reached" in text and "Calling finish() at end of Run" in text
 
 
 def run_checked(command: list[str], cwd: Path, description: str) -> None:
@@ -275,14 +239,6 @@ def run_checked(command: list[str], cwd: Path, description: str) -> None:
     result = subprocess.run(command, cwd=str(cwd))
     if result.returncode != 0:
         raise RuntimeError(f"{description} failed with exit code {result.returncode}")
-
-
-def generate_inputs() -> None:
-    run_checked(
-        [sys.executable, "generateExperiment2IniFiles.py"],
-        SCRIPT_DIR,
-        "Generating experiment 2 ini files",
-    )
 
 
 def nonempty(path: Path) -> bool:
@@ -293,13 +249,19 @@ def simulation_outputs_exist(entry: Entry) -> bool:
     return nonempty(expected_vec(entry)) and nonempty(expected_sca(entry))
 
 
-def completed_with_teardown_abort(return_code: int, log_path: Path) -> bool:
+def reached_time_limit(log_path: Path) -> bool:
+    if not log_path.exists():
+        return False
+    text = log_path.read_text(encoding="utf-8", errors="replace")
+    return "Simulation time limit reached" in text and "Calling finish() at end of Run" in text
+
+
+def teardown_abort_with_results(return_code: int, log_path: Path) -> bool:
     if return_code not in {-6, 134} or not log_path.exists():
         return False
     text = log_path.read_text(encoding="utf-8", errors="replace")
     finished = "\nEnd.\n" in text or text.rstrip().endswith("End.")
-    teardown_abort = "cSimulation::deleteNetwork" in text or "doDeleteModule" in text
-    return finished and teardown_abort
+    return finished and ("cSimulation::deleteNetwork" in text or "doDeleteModule" in text)
 
 
 def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool, int, Path]:
@@ -307,15 +269,15 @@ def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool,
     if args.resume and simulation_outputs_exist(entry):
         return entry, True, 0, Path()
     clean_entry(entry)
-
     log_path = LOG_DIR / "simulations" / f"{entry.config}.log"
-    command = simulation_command(entry, args)
-    return_code, timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path, args.sim_timeout_seconds)
+    return_code, timed_out = run_logged_command(
+        simulation_command(entry, args), EXPERIMENT_DIR, log_path, args.sim_timeout_seconds
+    )
     outputs_ok = simulation_outputs_exist(entry)
-    ok = outputs_ok and (return_code == 0 or reached_time_limit_before_cleanup(log_path))
-    if not ok and not timed_out and outputs_ok and completed_with_teardown_abort(return_code, log_path):
+    ok = outputs_ok and (return_code == 0 or reached_time_limit(log_path))
+    if not ok and not timed_out and outputs_ok and teardown_abort_with_results(return_code, log_path):
         with log_path.open("a", encoding="utf-8") as log:
-            log.write("\nRunner note: treating nonzero teardown abort as success because OMNeT reached End. and result files exist.\n")
+            log.write("\nRunner note: accepted teardown abort because End. and result files are present.\n")
         ok = True
     return entry, ok, return_code, log_path
 
@@ -325,15 +287,12 @@ def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     csv_path.unlink(missing_ok=True)
     log_path = LOG_DIR / "scavetool" / f"{entry.config}.log"
     command = [
-        tool_path("opp_scavetool"),
-        "export",
-        "-o",
-        f"results/{entry.config}.csv",
-        "-F",
-        "CSV-R",
+        tool_path("opp_scavetool"), "export",
+        "-o", f"results/{entry.config}.csv",
+        "-F", "CSV-R",
         f"results/{entry.config}-#0.vec",
     ]
-    return_code, _timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path)
+    return_code, _ = run_logged_command(command, EXPERIMENT_DIR, log_path)
     return entry, return_code == 0 and csv_path.exists(), return_code, log_path
 
 
@@ -348,20 +307,18 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         entry.protocol,
         str(entry.run),
     ]
-    return_code, _timed_out = run_logged_command(command, SCRIPT_DIR, log_path)
+    return_code, _ = run_logged_command(command, SCRIPT_DIR, log_path)
     ok = return_code == 0 and out_root.is_dir() and any(out_root.rglob("*.csv"))
     return entry, ok, return_code, log_path
 
 
-def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Namespace) -> None:
-    pending = list(work_entries)
-    attempts = args.retries + 1
+def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespace) -> None:
+    pending = list(entries)
     failure_lines: list[str] = []
-    for attempt in range(1, attempts + 1):
+    for attempt in range(1, args.retries + 2):
         if not pending:
             return
-
-        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{attempts}, {args.cores} core(s)")
+        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{args.retries + 1}, {args.cores} core(s)")
         failures: list[Entry] = []
         failure_lines = []
         executor = ThreadPoolExecutor(max_workers=args.cores)
@@ -375,9 +332,9 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
                     print(f"  ok: {entry.config}")
                 else:
                     failures.append(entry)
-                    line = f"{entry.config} (exit {code}, log: {log_path})"
-                    failure_lines.append(line)
-                    print(f"  failed: {line}")
+                    detail = f"{entry.config} (exit {code}, log: {log_path})"
+                    failure_lines.append(detail)
+                    print(f"  failed: {detail}")
         except KeyboardInterrupt:
             interrupted = True
             for future in futures:
@@ -388,11 +345,9 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
         finally:
             if not interrupted:
                 executor.shutdown(wait=True)
-
         pending = failures
-        if pending and attempt < attempts:
-            print(f"\nRetrying {len(pending)} failed/missing task(s).\n")
-
+        if pending and attempt <= args.retries:
+            print(f"Retrying {len(pending)} failed task(s).")
     if pending:
         raise RuntimeError(label + " failed:\n  " + "\n  ".join(failure_lines))
 
@@ -402,39 +357,29 @@ def main() -> int:
     args = parse_args()
     try:
         if not args.skip_generate:
-            generate_inputs()
-
-        selected = entries(args)
-        if not selected:
+            run_checked([sys.executable, "generateExperiment4IniFiles.py"], SCRIPT_DIR, "Generating experiment 4 ini files")
+        entries = selected_entries(args)
+        if not entries:
             print("no matching configs selected")
             return 1
-
         if args.clean:
             shutil.rmtree(RESULTS_DIR, ignore_errors=True)
             shutil.rmtree(EXPERIMENT_DIR / "csvs", ignore_errors=True)
-            shutil.rmtree(SIM_ROOT / "plots" / "experiment2", ignore_errors=True)
-
+            shutil.rmtree(SIM_ROOT / "plots" / "experiment4", ignore_errors=True)
         if enabled(1, args):
-            run_parallel("Running simulations", lambda entry: run_simulation(entry, args), selected, args)
+            run_parallel("Running simulations", lambda entry: run_simulation(entry, args), entries, args)
         if enabled(2, args):
-            run_parallel("Exporting vectors", export_csv, selected, args)
+            run_parallel("Exporting vectors", export_csv, entries, args)
         if enabled(3, args):
-            run_parallel("Extracting metric CSVs", extract_csv, selected, args)
+            run_parallel("Extracting metric CSVs", extract_csv, entries, args)
         if enabled(4, args):
-            command = [
-                sys.executable,
-                str(SCRIPT_DIR / "plotExperiment2.py"),
-                "--runs",
-                *[str(run) for run in range(1, args.runs + 1)],
-            ]
-            result = subprocess.run(command, cwd=str(SCRIPT_DIR))
-            if result.returncode != 0:
-                return result.returncode
+            command = [sys.executable, str(SCRIPT_DIR / "plotExperiment4.py"), "--runs"]
+            command.extend(str(run) for run in range(1, args.runs + 1))
+            return subprocess.run(command, cwd=str(SCRIPT_DIR)).returncode
     except KeyboardInterrupt:
         print("\nCancelled; terminating active child processes.", file=sys.stderr)
         terminate_all_active_processes()
         return 130
-
     return 0
 
 
