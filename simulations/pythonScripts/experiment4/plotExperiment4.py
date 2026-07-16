@@ -16,7 +16,7 @@ import pandas as pd
 MSS_BYTES = 1448
 PATH_CAPACITY_MBPS = 20.0
 COMPETITION_START = 40.0
-COMPETITION_END = 120.0
+COMPETITION_END = 80.0
 BASELINE_START = 20.0
 CONTESTED_START = 60.0
 FINAL_WINDOW_SECONDS = 60.0
@@ -30,6 +30,7 @@ PROTOCOLS = [
     ("lia", "LIA"),
     ("olia", "OLIA"),
     ("balia", "BALIA"),
+    ("mporb", "MPORB Uncoupled"),
     ("mporb_alpha", "MPORB Alpha"),
     ("mporb_delta", "MPORB Delta"),
 ]
@@ -303,6 +304,60 @@ def mark_competition(ax) -> None:
     ax.grid(True, alpha=0.3)
 
 
+def save_main_connection_goodput(
+    grouped: dict[str, list[Bundle]], out_dir: Path
+) -> None:
+    bundles = [bundle for group in grouped.values() for bundle in group]
+    if not bundles:
+        return
+    end = max(series_end(bundle) for bundle in bundles)
+    grid = np.arange(0.0, end + SAMPLE_SECONDS, SAMPLE_SECONDS)
+    fig, ax = plt.subplots(figsize=(9.5, 4.6))
+    for protocol, label in PROTOCOLS:
+        group = grouped.get(protocol, [])
+        if group:
+            band(ax, grid, [bundle.goodput for bundle in group], label)
+    ax.axhline(
+        2 * PATH_CAPACITY_MBPS,
+        color="black",
+        linestyle="--",
+        linewidth=1,
+        label="Total capacity",
+    )
+    ax.set_title("Main Connection Goodput")
+    ax.set_ylabel("Mbps")
+    ax.legend(fontsize=8)
+    mark_competition(ax)
+    fig.tight_layout()
+    fig.savefig(out_dir / "main_connection_goodput.pdf")
+    plt.close(fig)
+
+
+def save_individual_cwnd_plot(bundle: Bundle, out_root: Path) -> None:
+    out_dir = out_root / "by_protocol" / bundle.protocol / "runs" / f"run{bundle.run}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(9.5, 4.6))
+    ax.step(
+        bundle.cwnd1.index,
+        bundle.cwnd1.to_numpy(dtype=float) / MSS_BYTES,
+        where="post",
+        label="Path 1",
+    )
+    ax.step(
+        bundle.cwnd2.index,
+        bundle.cwnd2.to_numpy(dtype=float) / MSS_BYTES,
+        where="post",
+        label="Path 2",
+    )
+    ax.set_title(f"{bundle.label} Run {bundle.run}: Subflow cwnd")
+    ax.set_ylabel("Packets")
+    ax.legend()
+    mark_competition(ax)
+    fig.tight_layout()
+    fig.savefig(out_dir / "subflow_cwnd.pdf")
+    plt.close(fig)
+
+
 def save_protocol_plot(protocol: str, label: str, bundles: list[Bundle], out_root: Path) -> None:
     out_dir = out_root / "by_protocol" / protocol
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -384,9 +439,12 @@ def main() -> int:
     grouped: dict[str, list[Bundle]] = defaultdict(list)
     for bundle in bundles:
         grouped[bundle.protocol].append(bundle)
+    save_main_connection_goodput(grouped, aggregate_dir)
     for protocol, label in PROTOCOLS:
         if protocol in grouped:
             save_protocol_plot(protocol, label, grouped[protocol], out_dir)
+    for bundle in bundles:
+        save_individual_cwnd_plot(bundle, out_dir)
 
     print(f"wrote experiment 4 plots under {out_dir}")
     return 0

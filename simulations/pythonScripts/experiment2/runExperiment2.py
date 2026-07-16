@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [
+    ("MpOrbUncoupled", "mporb", "experiment2_mporb.ini"),
     ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment2_mporb_semicoupled_alpha.ini"),
     ("MpOrbSemiCoupledDelta", "mporb_semicoupled_delta", "experiment2_mporb_semicoupled_delta.ini"),
     ("LiaCoupled", "lia", "experiment2_lia.ini"),
@@ -22,6 +23,7 @@ CONFIGS = [
     ("BaliaCoupled", "balia", "experiment2_balia.ini"),
 ]
 DEFAULT_CONFIGS = [
+    "MpOrbUncoupled",
     "MpOrbSemiCoupledAlpha",
     "MpOrbSemiCoupledDelta",
     "LiaCoupled",

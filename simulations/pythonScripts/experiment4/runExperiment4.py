@@ -18,6 +18,7 @@ CONFIGS = [
     ("LiaCoupled", "lia", "experiment4_lia.ini"),
     ("OliaCoupled", "olia", "experiment4_olia.ini"),
     ("BaliaCoupled", "balia", "experiment4_balia.ini"),
+    ("MpOrbUncoupled", "mporb", "experiment4_mporb.ini"),
     ("MpOrbAlpha", "mporb_alpha", "experiment4_mporb_alpha.ini"),
     ("MpOrbDelta", "mporb_delta", "experiment4_mporb_delta.ini"),
 ]

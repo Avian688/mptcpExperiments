@@ -1,12 +1,21 @@
 <config>
-    <interface hosts="**" address="10.x.x.x" netmask="255.x.x.x"/>
-
-    <!-- Routers and servers use shortest paths. Explicit client routes keep
-         Red y1 on X then T instead of collapsing onto y2. -->
-    <autoroute sourceHosts="xIngress xEgress tIngress tEgress blueXExit blueTExit redXExit redTExit server[*]" metric="delay"/>
-
-    <route hosts="client[0]" destination="server[0]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[0]"/>
-    <route hosts="client[0]" destination="server[0]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[0]"/>
-    <route hosts="client[1]" destination="server[1]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[1]"/>
-    <route hosts="client[1]" destination="server[1]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[1]"/>
+    <interface hosts="**" address="10.x.x.x" netmask="255.x.x.x" />
+    <!-- Routers and servers use shortest paths. Explicit client routes keep Red y1 on X then T instead of collapsing onto y2. -->
+    <autoroute sourceHosts="xIngress xEgress tIngress tEgress blueXExit blueTExit redXExit redTExit server[*]" metric="delay" />
+    <route hosts="client[0]" destination="server[0]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[0]" />
+    <route hosts="client[0]" destination="server[0]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[0]" />
+    <route hosts="client[1]" destination="server[1]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[1]" />
+    <route hosts="client[1]" destination="server[1]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[1]" />
+    <route hosts="client[2]" destination="server[2]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[2]" />
+    <route hosts="client[2]" destination="server[2]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[2]" />
+    <route hosts="client[3]" destination="server[3]&gt;blueXExit" netmask="/32" gateway="xIngress&gt;client[3]" />
+    <route hosts="client[3]" destination="server[3]&gt;blueTExit" netmask="/32" gateway="tIngress&gt;client[3]" />
+    <route hosts="client[4]" destination="server[4]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[4]" />
+    <route hosts="client[4]" destination="server[4]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[4]" />
+    <route hosts="client[5]" destination="server[5]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[5]" />
+    <route hosts="client[5]" destination="server[5]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[5]" />
+    <route hosts="client[6]" destination="server[6]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[6]" />
+    <route hosts="client[6]" destination="server[6]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[6]" />
+    <route hosts="client[7]" destination="server[7]&gt;redXExit" netmask="/32" gateway="xIngress&gt;client[7]" />
+    <route hosts="client[7]" destination="server[7]&gt;redTExit" netmask="/32" gateway="tIngress&gt;client[7]" />
 </config>

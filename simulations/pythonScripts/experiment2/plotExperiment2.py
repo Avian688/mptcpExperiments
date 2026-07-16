@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 
 PROTOCOLS = [
+    ("mporb", "MPORB Uncoupled"),
     ("mporb_semicoupled_alpha", "Alpha"),
     ("mporb_semicoupled_delta", "Delta"),
     ("lia", "LIA"),
@@ -25,6 +26,11 @@ USERS = [
     ("B", 1, "shared 1-2, private 5-6"),
     ("C", 2, "shared 3-4, private 7-8"),
 ]
+USER_PATH_IDS = {
+    "A": (1, 2, 3, 4),
+    "B": (1, 2, 5, 6),
+    "C": (3, 4, 7, 8),
+}
 PATH_QUEUE_MODULES = {
     1: "sharedleopaths.router1[0].ppp[2].queue",
     2: "sharedleopaths.router1[1].ppp[2].queue",
@@ -291,6 +297,58 @@ def save_user_goodput_timeseries(
     plt.close(fig)
 
 
+def save_connection_goodput_plots(
+    protocol_groups: list[tuple[str, str, list[Bundle]]],
+    grid: np.ndarray,
+    out_dir: Path,
+    analysis_start: float,
+) -> None:
+    grid = post_join_grid(grid, analysis_start)
+    for user, _index, paths in USERS:
+        fig, ax = plt.subplots(figsize=(9.5, 4.6))
+        for _protocol, label, group in protocol_groups:
+            mean, std = series_stats([bundle.user_goodput[user] for bundle in group], grid)
+            mean_mbps = mean / 1e6
+            std_mbps = std / 1e6
+            ax.plot(grid, mean_mbps, label=f"{label} (n={len(group)})")
+            ax.fill_between(
+                grid,
+                np.maximum(mean_mbps - std_mbps, 0),
+                mean_mbps + std_mbps,
+                alpha=0.16,
+            )
+        ax.set_title(f"Connection {user} Goodput")
+        ax.set_xlabel("Time (s)")
+        ax.set_ylabel("Mbps")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8)
+        ax.text(0.01, 0.02, paths, transform=ax.transAxes, fontsize=8)
+        fig.tight_layout()
+        fig.savefig(out_dir / f"connection_{user}_goodput.pdf")
+        plt.close(fig)
+
+
+def save_individual_cwnd_plot(bundle: Bundle, out_root: Path) -> None:
+    if not any(bundle.subflow_cwnd.values()):
+        return
+    out_dir = out_root / "by_protocol" / bundle.protocol / "runs" / f"run{bundle.run}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(len(USERS), 1, figsize=(10, 8.5), sharex=True)
+    axes = np.atleast_1d(axes)
+    for ax, (user, _index, paths) in zip(axes, USERS):
+        for path, cwnd in zip(USER_PATH_IDS[user], bundle.subflow_cwnd[user]):
+            ax.step(cwnd.index, cwnd.to_numpy(dtype=float) / MSS_BYTES, where="post", label=f"Path {path}")
+        ax.set_title(f"Connection {user}: {paths}")
+        ax.set_ylabel("Packets")
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=8, ncol=4)
+    axes[-1].set_xlabel("Time (s)")
+    fig.suptitle(f"{bundle.label} Run {bundle.run}: Subflow cwnd")
+    fig.tight_layout()
+    fig.savefig(out_dir / "subflow_cwnd.pdf")
+    plt.close(fig)
+
+
 def save_subflow_timeseries(
     protocol_groups: list[tuple[str, str, list[Bundle]]],
     grid: np.ndarray,
@@ -513,12 +571,15 @@ def main() -> int:
 
     protocol_groups = grouped_by_protocol(bundles)
     save_user_goodput_timeseries(protocol_groups, grid, aggregate_dir, args.analysis_start)
+    save_connection_goodput_plots(protocol_groups, grid, aggregate_dir, args.analysis_start)
     save_subflow_timeseries(protocol_groups, grid, aggregate_dir, args.analysis_start)
     save_queue_timeseries(protocol_groups, grid, aggregate_dir, args.analysis_start)
     save_jain_timeseries(protocol_groups, grid, aggregate_dir, args.analysis_start)
     save_aggregate_plots(summary, aggregate_dir)
     for protocol, label, group in protocol_groups:
         save_protocol_plots(protocol, label, group, out_dir, args.analysis_start)
+    for bundle in bundles:
+        save_individual_cwnd_plot(bundle, out_dir)
 
     print(f"wrote aggregate plots under {aggregate_dir}")
     print(f"wrote per-protocol plots under {out_dir / 'by_protocol'}")

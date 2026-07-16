@@ -6,29 +6,36 @@ import inet.node.inet.StandardHost;
 import ned.DatarateChannel;
 import tcppaced.networklayer.configurator.ipv4.AutoNetworkConfigurator;
 
-// Minimal all-MPTCP version of the OLIA non-Pareto scenario.
+// Small all-MPTCP version of the OLIA paper's Scenario B.
 // Blue: x1 uses X, x2 uses T. Red: y1 uses X then T, y2 uses T.
 network oliapareto
 {
     parameters:
+        int usersPerType = default(4);
         @display("bgb=1050,650");
 
     types:
         channel bottleneckX extends DatarateChannel
         {
             delay = 0ms;
-            datarate = 90Mbps;
+            datarate = 27Mbps;
         }
 
         channel bottleneckT extends DatarateChannel
         {
             delay = 0ms;
-            datarate = 120Mbps;
+            datarate = 36Mbps;
         }
 
         channel fast0ms extends DatarateChannel
         {
             delay = 0ms;
+            datarate = 10Gbps;
+        }
+
+        channel delay5ms extends DatarateChannel
+        {
+            delay = 5ms;
             datarate = 10Gbps;
         }
 
@@ -38,30 +45,24 @@ network oliapareto
             datarate = 10Gbps;
         }
 
-        channel delay20ms extends DatarateChannel
+        channel delay12_5ms extends DatarateChannel
         {
-            delay = 20ms;
+            delay = 12.5ms;
             datarate = 10Gbps;
         }
 
-        channel delay25ms extends DatarateChannel
+        channel delay15ms extends DatarateChannel
         {
-            delay = 25ms;
-            datarate = 10Gbps;
-        }
-
-        channel delay30ms extends DatarateChannel
-        {
-            delay = 30ms;
+            delay = 15ms;
             datarate = 10Gbps;
         }
 
     submodules:
-        client[2]: StandardHost {
+        client[2 * usersPerType]: StandardHost {
             @display("p=70,150,m,1,2,320");
         }
 
-        server[2]: StandardHost {
+        server[2 * usersPerType]: StandardHost {
             @display("p=980,150,m,1,2,320");
         }
 
@@ -107,21 +108,25 @@ network oliapareto
         tIngress.pppg++ <--> bottleneckT <--> tEgress.pppg++;
 
         // Red y1 consumes both X and T. This serial path is the inefficient route.
-        xEgress.pppg++ <--> delay20ms <--> tIngress.pppg++;
+        xEgress.pppg++ <--> delay10ms <--> tIngress.pppg++;
 
-        // Blue x1 through X and x2 through T, both with 100 ms base RTT.
-        client[0].pppg++ <--> delay25ms <--> xIngress.pppg++;
-        client[0].pppg++ <--> delay25ms <--> tIngress.pppg++;
+        // Blue x1 through X and x2 through T, both with 50 ms base RTT.
         xEgress.pppg++ <--> fast0ms <--> blueXExit.pppg++;
-        blueXExit.pppg++ <--> delay25ms <--> server[0].pppg++;
         tEgress.pppg++ <--> fast0ms <--> blueTExit.pppg++;
-        blueTExit.pppg++ <--> delay25ms <--> server[0].pppg++;
+        for i=0..usersPerType-1 {
+            client[i].pppg++ <--> delay12_5ms <--> xIngress.pppg++;
+            client[i].pppg++ <--> delay12_5ms <--> tIngress.pppg++;
+            blueXExit.pppg++ <--> delay12_5ms <--> server[i].pppg++;
+            blueTExit.pppg++ <--> delay12_5ms <--> server[i].pppg++;
+        }
 
-        // Red y1 through X then T and y2 through T, both with 100 ms base RTT.
-        client[1].pppg++ <--> delay10ms <--> xIngress.pppg++;
-        client[1].pppg++ <--> delay30ms <--> tIngress.pppg++;
+        // Red y1 through X then T and y2 through T, both with 50 ms base RTT.
         tEgress.pppg++ <--> fast0ms <--> redXExit.pppg++;
-        redXExit.pppg++ <--> delay20ms <--> server[1].pppg++;
         tEgress.pppg++ <--> fast0ms <--> redTExit.pppg++;
-        redTExit.pppg++ <--> delay20ms <--> server[1].pppg++;
+        for i=0..usersPerType-1 {
+            client[usersPerType + i].pppg++ <--> delay5ms <--> xIngress.pppg++;
+            client[usersPerType + i].pppg++ <--> delay15ms <--> tIngress.pppg++;
+            redXExit.pppg++ <--> delay10ms <--> server[usersPerType + i].pppg++;
+            redTExit.pppg++ <--> delay10ms <--> server[usersPerType + i].pppg++;
+        }
 }

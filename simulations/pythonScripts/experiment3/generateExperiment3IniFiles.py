@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import math
 import random
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 MSS_BYTES = 1448
-USER_COUNT = 2
-PATH_RTT_MS = 100
-X_MBPS = 90
-T_MBPS = 120
+USERS_PER_TYPE = 4
+USER_COUNT = 2 * USERS_PER_TYPE
+PATH_RTT_MS = 50
+X_MBPS = 27
+T_MBPS = 36
+SIM_TIME_LIMIT_S = 150
 RUNS = range(1, 6)
 START_RANDOM_WINDOW_S = 2.0
 START_RANDOM_SEED = 3999
@@ -34,6 +37,12 @@ PROTOCOLS = {
         "algorithm_class": "MpTcpBalia",
         "description": "BALIA",
     },
+    "mporb": {
+        "config": "MpOrbUncoupled",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbUncoupled",
+        "description": "MPORB Uncoupled",
+    },
     "mporb_alpha": {
         "config": "MpOrbAlpha",
         "tcp_type": "MpOrb",
@@ -51,6 +60,7 @@ PROTOCOLS = {
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
 EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment3"
+SCENARIO_DIR = SIM_ROOT / "experiments" / "scenarios" / "experiment3"
 
 
 def highest_bdp_packets() -> int:
@@ -58,7 +68,13 @@ def highest_bdp_packets() -> int:
 
 
 def initial_ssthresh_bytes() -> int:
-    return int(X_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / 8)
+    packets = math.ceil(
+        X_MBPS
+        * 1_000_000
+        * (PATH_RTT_MS / 1000)
+        / (MSS_BYTES * 8 * USERS_PER_TYPE)
+    )
+    return packets * MSS_BYTES
 
 
 def flow_start_times(run: int) -> list[float]:
@@ -92,6 +108,72 @@ def common_ned_path_line() -> str:
     return "ned-path = " + ":".join(paths)
 
 
+def client_configuration_lines() -> list[str]:
+    lines: list[str] = []
+    for user in range(USER_COUNT):
+        if user < USERS_PER_TYPE:
+            remote_addresses = f"server[{user}]>blueXExit server[{user}]>blueTExit"
+        else:
+            remote_addresses = f"server[{user}]>redXExit server[{user}]>redTExit"
+        lines.extend(
+            [
+                f'*.client[{user}].app[0].connectAddress = "server[{user}]"',
+                f'*.client[{user}].tcp.subflowRemoteAddresses = "{remote_addresses}"',
+            ]
+        )
+    return lines
+
+
+def write_routes_xml() -> Path:
+    SCENARIO_DIR.mkdir(parents=True, exist_ok=True)
+    root = ET.Element("config")
+    ET.SubElement(
+        root,
+        "interface",
+        {"hosts": "**", "address": "10.x.x.x", "netmask": "255.x.x.x"},
+    )
+    root.append(
+        ET.Comment(
+            " Routers and servers use shortest paths. Explicit client routes keep "
+            "Red y1 on X then T instead of collapsing onto y2. "
+        )
+    )
+    ET.SubElement(
+        root,
+        "autoroute",
+        {
+            "sourceHosts": (
+                "xIngress xEgress tIngress tEgress blueXExit blueTExit "
+                "redXExit redTExit server[*]"
+            ),
+            "metric": "delay",
+        },
+    )
+
+    for user in range(USER_COUNT):
+        if user < USERS_PER_TYPE:
+            exits = (("blueXExit", "xIngress"), ("blueTExit", "tIngress"))
+        else:
+            exits = (("redXExit", "xIngress"), ("redTExit", "tIngress"))
+        for exit_router, ingress in exits:
+            ET.SubElement(
+                root,
+                "route",
+                {
+                    "hosts": f"client[{user}]",
+                    "destination": f"server[{user}]>{exit_router}",
+                    "netmask": "/32",
+                    "gateway": f"{ingress}>client[{user}]",
+                },
+            )
+
+    ET.indent(root, space="    ")
+    path = SCENARIO_DIR / "routes.xml"
+    ET.ElementTree(root).write(path, encoding="unicode")
+    path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    return path
+
+
 def write_common_general(write) -> None:
     queue_packets = highest_bdp_packets()
     lines = (
@@ -99,7 +181,7 @@ def write_common_general(write) -> None:
         common_ned_path_line(),
         "",
         "network = mptcpexperiments.simulations.experiments.experiment3.oliapareto",
-        "sim-time-limit = 100s",
+        f"sim-time-limit = {SIM_TIME_LIMIT_S}s",
         "record-eventlog = false",
         "cmdenv-express-mode = true",
         "cmdenv-event-banners = false",
@@ -108,6 +190,7 @@ def write_common_general(write) -> None:
         "cmdenv-log-prefix = %t | %m |",
         "**.cmdenv-log-level = off",
         "",
+        f"# Compact Scenario B: {USERS_PER_TYPE} Blue and {USERS_PER_TYPE} Red MPTCP connections.",
         "# OLIA motivation: Red y1 crosses both X and T, so each Mbps on y1",
         "# consumes two bottlenecks and reduces achievable aggregate goodput by one Mbps.",
         "# Blue paths: x1=X, x2=T. Red paths: y1=X->T, y2=T.",
@@ -123,10 +206,7 @@ def write_common_general(write) -> None:
         "",
         "**.client[*].numApps = 1",
         "**.client[*].app[0].typename = \"MpTcpSessionApp\"",
-        "*.client[0].app[0].connectAddress = \"server[0]\"",
-        "*.client[1].app[0].connectAddress = \"server[1]\"",
-        "*.client[0].tcp.subflowRemoteAddresses = \"server[0]>blueXExit server[0]>blueTExit\"",
-        "*.client[1].tcp.subflowRemoteAddresses = \"server[1]>redXExit server[1]>redTExit\"",
+        *client_configuration_lines(),
         "**.client[*].app[0].tOpen = 0.1s",
         "**.client[*].app[0].tSend = 0.1s",
         "**.client[*].app[0].tClose = -1s",
@@ -207,7 +287,7 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
     config = f'{settings["config"]}_Run{run}'
     write(f"[Config {config}]")
     write("extends = General")
-    write(f'description = "{settings["description"]}; OLIA Pareto test, run {run}."')
+    write(f'description = "{settings["description"]}; all-MPTCP Scenario B, run {run}."')
     write(f"seed-set = {run}")
     for user, start_time in enumerate(flow_start_times(run)):
         write(f"*.client[{user}].app[0].tOpen = {start_time:.6f}s")
@@ -218,10 +298,12 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
 
 
 def main() -> None:
-    if highest_bdp_packets() != 1036:
+    if highest_bdp_packets() != 156:
         raise RuntimeError(f"unexpected higher-BDP packet count: {highest_bdp_packets()}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
+    routes_path = write_routes_xml()
+    print(f"Generated {routes_path}.")
     for protocol, settings in PROTOCOLS.items():
         out_path = EXPERIMENT_DIR / f"experiment3_{protocol}.ini"
         with out_path.open("w", encoding="utf-8") as output:

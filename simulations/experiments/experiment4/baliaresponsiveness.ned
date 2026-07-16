@@ -60,15 +60,16 @@ network baliaresponsiveness
         p1Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 20Mbps; } <--> p1Egress.pppg++;
         p2Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 20Mbps; } <--> p2Egress.pppg++;
 
-        client[0].pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> p1Ingress.pppg++;
-        p1Egress.pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> server[0].pppg++;
+        // Two 5 ms access legs in each direction give each path a 20 ms RTT.
+        client[0].pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> p1Ingress.pppg++;
+        p1Egress.pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> server[0].pppg++;
 
-        client[0].pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> p2Ingress.pppg++;
-        p2Egress.pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> server[0].pppg++;
+        client[0].pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> p2Ingress.pppg++;
+        p2Egress.pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> server[0].pppg++;
 
         // The competing connections have no route through path 1.
         for i=0..sizeof(backgroundClient)-1 {
-            backgroundClient[i].pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> p2Ingress.pppg++;
-            p2Egress.pppg++ <--> DatarateChannel { delay = 25ms; datarate = 10Gbps; } <--> backgroundServer[i].pppg++;
+            backgroundClient[i].pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> p2Ingress.pppg++;
+            p2Egress.pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> backgroundServer[i].pppg++;
         }
 }

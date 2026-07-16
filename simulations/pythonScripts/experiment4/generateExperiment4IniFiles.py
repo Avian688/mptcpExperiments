@@ -8,17 +8,14 @@ from pathlib import Path
 
 MSS_BYTES = 1448
 PATH_MBPS = 20
-PATH_RTT_MS = 100
+PATH_RTT_MS = 20
 BACKGROUND_FLOW_COUNT = 5
-BACKGROUND_INITIAL_SSTHRESH_BYTES = 80_000
+BACKGROUND_INITIAL_SSTHRESH_BYTES = 40_000
 COMPETITION_START_S = 40
-BACKGROUND_START_SPACING_S = 2.0
-BACKGROUND_START_JITTER_S = 0.5
-COMPETITION_END_S = 120
+COMPETITION_END_S = 80
 SIM_TIME_LIMIT_S = 200
 RUNS = range(1, 6)
 START_RANDOM_SEED = 4999
-BACKGROUND_START_RANDOM_SEED = 5499
 
 PROTOCOLS = {
     "lia": {
@@ -38,6 +35,12 @@ PROTOCOLS = {
         "tcp_type": "MpTcp",
         "algorithm_class": "MpTcpBalia",
         "description": "BALIA",
+    },
+    "mporb": {
+        "config": "MpOrbUncoupled",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbUncoupled",
+        "description": "MPORB Uncoupled",
     },
     "mporb_alpha": {
         "config": "MpOrbAlpha",
@@ -64,16 +67,6 @@ def bdp_packets() -> int:
 
 def flow_start_time(run: int) -> float:
     return random.Random(START_RANDOM_SEED + run).uniform(0.1, 2.0)
-
-
-def background_start_times(run: int) -> list[float]:
-    random_generator = random.Random(BACKGROUND_START_RANDOM_SEED + run)
-    return [
-        COMPETITION_START_S
-        + index * BACKGROUND_START_SPACING_S
-        + random_generator.uniform(0.0, BACKGROUND_START_JITTER_S)
-        for index in range(BACKGROUND_FLOW_COUNT)
-    ]
 
 
 def common_ned_path_line() -> str:
@@ -104,11 +97,6 @@ def common_ned_path_line() -> str:
 
 def write_common_general(write) -> None:
     queue_packets = bdp_packets()
-    latest_background_start = (
-        COMPETITION_START_S
-        + (BACKGROUND_FLOW_COUNT - 1) * BACKGROUND_START_SPACING_S
-        + BACKGROUND_START_JITTER_S
-    )
     lines = (
         "[General]",
         common_ned_path_line(),
@@ -123,9 +111,9 @@ def write_common_general(write) -> None:
         "cmdenv-log-prefix = %t | %m |",
         "**.cmdenv-log-level = off",
         "",
-        "# BALIA responsiveness test: two fixed 20 Mbps, 100 ms paths.",
-        f"# Five one-subflow connections using the tested CC join path 2 between {COMPETITION_START_S} s and "
-        f"{latest_background_start:.1f} s, then stop admitting new data at {COMPETITION_END_S} s.",
+        f"# BALIA responsiveness test: two fixed {PATH_MBPS} Mbps, {PATH_RTT_MS} ms paths.",
+        f"# Five one-subflow connections using the tested CC join path 2 together at "
+        f"{COMPETITION_START_S} s, then stop admitting new data at {COMPETITION_END_S} s.",
         f"# Every queue uses the highest path BDP: {queue_packets} packets at MSS {MSS_BYTES}.",
         "*.backgroundClient[*].app[0].numberOfSubflows = 1",
         "*.backgroundServer[*].app[0].numberOfSubflows = 1",
@@ -283,23 +271,22 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
 def write_config(write, settings: dict[str, str], run: int) -> None:
     config = f'{settings["config"]}_Run{run}'
     start_time = flow_start_time(run)
-    competitor_start_times = background_start_times(run)
     write(f"[Config {config}]")
     write("extends = General")
     write(f'description = "{settings["description"]}; BALIA responsiveness test, run {run}."')
     write(f"seed-set = {run}")
     write(f"*.client[0].app[0].tOpen = {start_time:.6f}s")
     write(f"*.client[0].app[0].tSend = {start_time:.6f}s")
-    for index, competitor_start_time in enumerate(competitor_start_times):
-        write(f"*.backgroundClient[{index}].app[0].tOpen = {competitor_start_time:.6f}s")
-        write(f"*.backgroundClient[{index}].app[0].tSend = {competitor_start_time:.6f}s")
+    for index in range(BACKGROUND_FLOW_COUNT):
+        write(f"*.backgroundClient[{index}].app[0].tOpen = {COMPETITION_START_S}s")
+        write(f"*.backgroundClient[{index}].app[0].tSend = {COMPETITION_START_S}s")
     write(f'output-vector-file = "results/{config}-#0.vec"')
     write(f'output-scalar-file = "results/{config}-#0.sca"')
     write()
 
 
 def main() -> None:
-    if bdp_packets() != 173:
+    if bdp_packets() != 35:
         raise RuntimeError(f"unexpected BDP packet count: {bdp_packets()}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)

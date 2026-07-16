@@ -22,6 +22,12 @@ precompiled_*.h.*
 .settings/
 .ccls-cache/
 
+# generated experiment artifacts
+/simulations/experiments/*/results/
+/simulations/experiments/*/csvs/
+/simulations/logs/
+/simulations/plots/
+
 *.log
 *.sim
 *.pyc

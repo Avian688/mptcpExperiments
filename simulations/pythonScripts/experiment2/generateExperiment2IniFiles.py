@@ -8,12 +8,18 @@ from pathlib import Path
 
 MSS_BYTES = 1448
 PATH_MBPS = 100
-PATH_RTT_MS = 60
+PATH_RTT_MS = 40
 RUNS = range(1, 6)
 START_RANDOM_WINDOW_S = 5.0
 START_RANDOM_SEED = 2999
 
 PROTOCOLS = {
+    "mporb": {
+        "config": "MpOrbUncoupled",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbUncoupled",
+        "description": "Uncoupled MPORB",
+    },
     "mporb_semicoupled_alpha": {
         "config": "MpOrbSemiCoupledAlpha",
         "tcp_type": "MpOrb",
@@ -107,7 +113,7 @@ def write_common_general(write) -> None:
         "",
         "# A uses paths 1-4; B uses 1,2,5,6; C uses 3,4,7,8.",
         "# All three connections have four subflows.",
-        "# All eight paths are 60 ms / 100 Mbps with one-BDP (518 packet) queues.",
+        f"# All eight paths are {PATH_RTT_MS} ms / {PATH_MBPS} Mbps with one-BDP ({bdp_packets()} packet) queues.",
         f"# Run configs start all three users uniformly in the first {START_RANDOM_WINDOW_S:g} seconds.",
         "**.numberOfClientServers = 3",
         "**.numberOfSubflows = 4",
@@ -204,7 +210,7 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.**.queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.**.queue.queueLength.result-recording-modes = vector(removeRepeats)",
-        "**.ppp[*].queue.packetCapacity = 518",
+        f"**.ppp[*].queue.packetCapacity = {bdp_packets()}",
         "**.scalar-recording = false",
         "**.vector-recording = false",
         "**.bin-recording = false",
@@ -256,7 +262,7 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
 
 def main() -> None:
     expected_packets = bdp_packets()
-    if expected_packets != 518:
+    if expected_packets != 346:
         raise RuntimeError(f"unexpected BDP packet count: {expected_packets}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)

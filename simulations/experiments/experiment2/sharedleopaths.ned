@@ -13,9 +13,9 @@ network sharedleopaths
         int numberOfClientServers = default(3);
 
     types:
-        channel access60ms extends DatarateChannel
+        channel access40ms extends DatarateChannel
         {
-            delay = 15ms;
+            delay = 10ms;
             datarate = 10Gbps;
         }
 
@@ -51,38 +51,38 @@ network sharedleopaths
         // All paths have identical RTT and capacity so only sharing differs.
 
         // Paths 1 and 2 are shared by A and B.
-        client[0].pppg++ <--> access60ms <--> router1[0].pppg++;
-        router2[0].pppg++ <--> access60ms <--> server[0].pppg++;
-        client[1].pppg++ <--> access60ms <--> router1[0].pppg++;
-        router2[0].pppg++ <--> access60ms <--> server[1].pppg++;
+        client[0].pppg++ <--> access40ms <--> router1[0].pppg++;
+        router2[0].pppg++ <--> access40ms <--> server[0].pppg++;
+        client[1].pppg++ <--> access40ms <--> router1[0].pppg++;
+        router2[0].pppg++ <--> access40ms <--> server[1].pppg++;
 
-        client[0].pppg++ <--> access60ms <--> router1[1].pppg++;
-        router2[1].pppg++ <--> access60ms <--> server[0].pppg++;
-        client[1].pppg++ <--> access60ms <--> router1[1].pppg++;
-        router2[1].pppg++ <--> access60ms <--> server[1].pppg++;
+        client[0].pppg++ <--> access40ms <--> router1[1].pppg++;
+        router2[1].pppg++ <--> access40ms <--> server[0].pppg++;
+        client[1].pppg++ <--> access40ms <--> router1[1].pppg++;
+        router2[1].pppg++ <--> access40ms <--> server[1].pppg++;
 
         // Paths 3 and 4 are shared by A and C.
-        client[0].pppg++ <--> access60ms <--> router1[2].pppg++;
-        router2[2].pppg++ <--> access60ms <--> server[0].pppg++;
-        client[2].pppg++ <--> access60ms <--> router1[2].pppg++;
-        router2[2].pppg++ <--> access60ms <--> server[2].pppg++;
+        client[0].pppg++ <--> access40ms <--> router1[2].pppg++;
+        router2[2].pppg++ <--> access40ms <--> server[0].pppg++;
+        client[2].pppg++ <--> access40ms <--> router1[2].pppg++;
+        router2[2].pppg++ <--> access40ms <--> server[2].pppg++;
 
-        client[0].pppg++ <--> access60ms <--> router1[3].pppg++;
-        router2[3].pppg++ <--> access60ms <--> server[0].pppg++;
-        client[2].pppg++ <--> access60ms <--> router1[3].pppg++;
-        router2[3].pppg++ <--> access60ms <--> server[2].pppg++;
+        client[0].pppg++ <--> access40ms <--> router1[3].pppg++;
+        router2[3].pppg++ <--> access40ms <--> server[0].pppg++;
+        client[2].pppg++ <--> access40ms <--> router1[3].pppg++;
+        router2[3].pppg++ <--> access40ms <--> server[2].pppg++;
 
         // B has private paths 5 and 6.
-        client[1].pppg++ <--> access60ms <--> router1[4].pppg++;
-        router2[4].pppg++ <--> access60ms <--> server[1].pppg++;
-        client[1].pppg++ <--> access60ms <--> router1[5].pppg++;
-        router2[5].pppg++ <--> access60ms <--> server[1].pppg++;
+        client[1].pppg++ <--> access40ms <--> router1[4].pppg++;
+        router2[4].pppg++ <--> access40ms <--> server[1].pppg++;
+        client[1].pppg++ <--> access40ms <--> router1[5].pppg++;
+        router2[5].pppg++ <--> access40ms <--> server[1].pppg++;
 
         // C has private paths 7 and 8.
-        client[2].pppg++ <--> access60ms <--> router1[6].pppg++;
-        router2[6].pppg++ <--> access60ms <--> server[2].pppg++;
-        client[2].pppg++ <--> access60ms <--> router1[7].pppg++;
-        router2[7].pppg++ <--> access60ms <--> server[2].pppg++;
+        client[2].pppg++ <--> access40ms <--> router1[6].pppg++;
+        router2[6].pppg++ <--> access40ms <--> server[2].pppg++;
+        client[2].pppg++ <--> access40ms <--> router1[7].pppg++;
+        router2[7].pppg++ <--> access40ms <--> server[2].pppg++;
 
         router1[0].pppg++ <--> bottleneck100Mbps <--> router2[0].pppg++;
         router1[1].pppg++ <--> bottleneck100Mbps <--> router2[1].pppg++;
