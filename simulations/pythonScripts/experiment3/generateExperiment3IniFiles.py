@@ -55,6 +55,12 @@ PROTOCOLS = {
         "algorithm_class": "MpOrbSemiCoupledDelta",
         "description": "MPORB Delta",
     },
+    "mporb_epsilon": {
+        "config": "MpOrbEpsilon",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbSemiCoupledEpsilon",
+        "description": "MPORB Epsilon",
+    },
 }
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -250,6 +256,14 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.semiCoupledDeltaTargetShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaRateShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaAiShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonPathPrice:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonOpportunity:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonTargetShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonResponsiveness:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAiShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAiRateBudget:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAdjustedAi:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.xIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.tIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
@@ -278,7 +292,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_delta"} else "**.alpha = 0.01")
+        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_delta", "mporb_epsilon"} else "**.alpha = 0.01")
         write("**.fixedAvgRTTVal = 0")
     write()
 

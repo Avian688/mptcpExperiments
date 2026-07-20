@@ -30,7 +30,13 @@ PROTOCOLS = {
         "config": "MpOrbSemiCoupledDelta",
         "tcp_type": "MpOrb",
         "algorithm_class": "MpOrbSemiCoupledDelta",
-        "description": "MPORB Delta squared Gamma response with Alpha budget",
+        "description": "MPORB Delta target-responsive coupling with Alpha budget",
+    },
+    "mporb_semicoupled_epsilon": {
+        "config": "MpOrbSemiCoupledEpsilon",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbSemiCoupledEpsilon",
+        "description": "MPORB Epsilon full-path INT price with Delta response",
     },
     "lia": {
         "config": "LiaCoupled",
@@ -184,15 +190,6 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.sharingFlows:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.bottleneckBandwidth:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.queueingDelay:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledConnectionRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledDeliveryRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledConnectionCount:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledFairRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledRelativeOpportunity:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledUtilizationSafety:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledPathWeight:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledAiRateBudget:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledAdjustedAi:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledAlphaSubflowRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledAlphaConnectionRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledAlphaRateShare:vector(removeRepeats).vector-recording = true",
@@ -202,9 +199,14 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.semiCoupledDeltaRateShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaResponsiveness:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaAiShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledMarginalValue:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledPathPrice:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledWindowDelta:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonPathPrice:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonOpportunity:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonTargetShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonResponsiveness:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAiShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAiRateBudget:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonAdjustedAi:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
@@ -236,7 +238,11 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        if protocol in {"mporb_semicoupled_alpha", "mporb_semicoupled_delta"}:
+        if protocol in {
+            "mporb_semicoupled_alpha",
+            "mporb_semicoupled_delta",
+            "mporb_semicoupled_epsilon",
+        }:
             write("# Zero selects OrbCC's time-normalized alpha = tau / averageRTT.")
             write("**.alpha = 0")
         else:

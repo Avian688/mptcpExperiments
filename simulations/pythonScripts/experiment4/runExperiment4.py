@@ -21,6 +21,7 @@ CONFIGS = [
     ("MpOrbUncoupled", "mporb", "experiment4_mporb.ini"),
     ("MpOrbAlpha", "mporb_alpha", "experiment4_mporb_alpha.ini"),
     ("MpOrbDelta", "mporb_delta", "experiment4_mporb_delta.ini"),
+    ("MpOrbEpsilon", "mporb_epsilon", "experiment4_mporb_epsilon.ini"),
 ]
 DEFAULT_RUNS = 5
 

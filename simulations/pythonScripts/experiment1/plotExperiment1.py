@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_pdf import PdfPages
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plotHelpers import save_figure
 
 CONFIGS = [
     ("cubic", "default", "CUBIC default"),
@@ -398,17 +403,24 @@ def save_variant_plots(
     return rows
 
 
-def plot_summary_lines(summary: pd.DataFrame, metric: str, ylabel: str, title: str, out_path: Path) -> None:
+def plot_summary_lines(
+    summary: pd.DataFrame,
+    metric: str,
+    ylabel: str,
+    title: str,
+    out_path: Path,
+    combined_pdf: PdfPages,
+) -> None:
     data = summary.dropna(subset=["variable_rtt_ms"])
     if data.empty:
         return
-    plt.figure(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 5))
     for protocol, scheduler, label in CONFIGS:
         subset = data[(data["protocol"] == protocol) & (data["scheduler"] == scheduler)].sort_values("variable_rtt_ms")
         if subset.empty:
             continue
         yerr = subset[f"{metric}_std"] if f"{metric}_std" in subset.columns else None
-        plt.errorbar(
+        ax.errorbar(
             subset["variable_rtt_ms"],
             subset[metric],
             yerr=yerr,
@@ -418,14 +430,12 @@ def plot_summary_lines(summary: pd.DataFrame, metric: str, ylabel: str, title: s
             elinewidth=0.9,
             label=label,
         )
-    plt.xlabel("Variable path RTT (ms)")
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.grid(True, alpha=0.3)
-    plt.legend(ncol=2, fontsize=8)
-    plt.tight_layout()
-    plt.savefig(out_path)
-    plt.close()
+    ax.set_xlabel("Variable path RTT (ms)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    ax.legend(ncol=2, fontsize=8)
+    save_figure(fig, out_path, combined_pdf)
 
 
 def save_aggregate_plots(run_summary: pd.DataFrame, summary: pd.DataFrame, out_dir: Path) -> None:
@@ -436,27 +446,31 @@ def save_aggregate_plots(run_summary: pd.DataFrame, summary: pd.DataFrame, out_d
     run_summary.to_csv(out_dir / "summary_runs_final_window.csv", index=False)
     summary.to_csv(out_dir / "summary_final_window.csv", index=False)
 
-    plot_summary_lines(
-        summary,
-        "post_join_app_goodput_mbps",
-        "Post-join app goodput (Mbps)",
-        "Goodput",
-        aggregate_dir / "goodput.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "post_join_hol_blocked_packets",
-        "HoL blocked data (MSS packets)",
-        "HoL Blocking",
-        aggregate_dir / "hol_blocking.pdf",
-    )
-    plot_summary_lines(
-        summary,
-        "post_join_dsn_gap_packets",
-        "DSN gap (MSS packets)",
-        "DSN Gap",
-        aggregate_dir / "dsn_gap.pdf",
-    )
+    with PdfPages(out_dir / "aggregate.pdf") as combined_pdf:
+        plot_summary_lines(
+            summary,
+            "post_join_app_goodput_mbps",
+            "Post-join app goodput (Mbps)",
+            "Goodput",
+            aggregate_dir / "goodput.pdf",
+            combined_pdf,
+        )
+        plot_summary_lines(
+            summary,
+            "post_join_hol_blocked_packets",
+            "HoL blocked data (MSS packets)",
+            "HoL Blocking",
+            aggregate_dir / "hol_blocking.pdf",
+            combined_pdf,
+        )
+        plot_summary_lines(
+            summary,
+            "post_join_dsn_gap_packets",
+            "DSN gap (MSS packets)",
+            "DSN Gap",
+            aggregate_dir / "dsn_gap.pdf",
+            combined_pdf,
+        )
 
 
 def selected_runs(args: argparse.Namespace) -> list[int]:
@@ -513,6 +527,7 @@ def main() -> int:
     summary = aggregate_summary(run_summary)
     save_aggregate_plots(run_summary, summary, out_dir)
     print(f"wrote aggregate plots under {out_dir / 'aggregate'}")
+    print(f"wrote combined aggregate plots to {out_dir / 'aggregate.pdf'}")
     print(f"wrote per-RTT plots under {out_dir / 'by_rtt'}")
     print(f"aggregated runs: {', '.join(str(run) for run in runs)}")
     return 0

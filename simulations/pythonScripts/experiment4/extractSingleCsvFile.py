@@ -30,6 +30,14 @@ VECTORS_TO_EXTRACT = {
     "semiCoupledDeltaTargetShare",
     "semiCoupledDeltaRateShare",
     "semiCoupledDeltaAiShare",
+    "semiCoupledEpsilonPathPrice",
+    "semiCoupledEpsilonOpportunity",
+    "semiCoupledEpsilonTargetShare",
+    "semiCoupledEpsilonRateShare",
+    "semiCoupledEpsilonResponsiveness",
+    "semiCoupledEpsilonAiShare",
+    "semiCoupledEpsilonAiRateBudget",
+    "semiCoupledEpsilonAdjustedAi",
     "queueLength",
 }
 

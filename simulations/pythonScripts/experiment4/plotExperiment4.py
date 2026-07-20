@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,10 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.backends.backend_pdf import PdfPages
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plotHelpers import annotated_heatmap, mean_std_annotations, save_figure
 
 MSS_BYTES = 1448
 PATH_CAPACITY_MBPS = 20.0
@@ -25,6 +30,10 @@ SUSTAIN_SECONDS = 5.0
 SAMPLE_SECONDS = 0.5
 DEFAULT_RUNS = [1, 2, 3, 4, 5]
 BACKGROUND_FLOW_COUNT = 5
+QUEUE_MODULES = {
+    "Path 1": "baliaresponsiveness.p1Ingress.ppp[0].queue",
+    "Path 2": "baliaresponsiveness.p2Ingress.ppp[0].queue",
+}
 
 PROTOCOLS = [
     ("lia", "LIA"),
@@ -33,6 +42,7 @@ PROTOCOLS = [
     ("mporb", "MPORB Uncoupled"),
     ("mporb_alpha", "MPORB Alpha"),
     ("mporb_delta", "MPORB Delta"),
+    ("mporb_epsilon", "MPORB Epsilon"),
 ]
 
 
@@ -47,6 +57,7 @@ class Bundle:
     cwnd1: pd.Series
     cwnd2: pd.Series
     background_goodput: list[pd.Series]
+    queues: dict[str, pd.Series]
 
 
 def read_series(path: Path, column: str) -> pd.Series | None:
@@ -109,17 +120,23 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> Bundle |
         and (item := read_series(path, "goodput")) is not None
         and not item.empty
     ]
+    queues = {
+        name: read_series(run_root / module / "queueLength.csv", "queueLength")
+        for name, module in QUEUE_MODULES.items()
+    }
 
     if (
         goodput is None
         or len(throughput) != 2
         or len(congestion_windows) != 2
         or len(background_goodput) != BACKGROUND_FLOW_COUNT
+        or any(queue is None for queue in queues.values())
     ):
         print(
             f"warning: incomplete {label} run{run}: goodput={goodput is not None}, "
             f"throughput subflows={len(throughput)}, cwnd subflows={len(congestion_windows)}, "
-            f"background flows={len(background_goodput)}"
+            f"background flows={len(background_goodput)}, "
+            f"queues={sum(queue is not None for queue in queues.values())}/{len(QUEUE_MODULES)}"
         )
         return None
 
@@ -148,13 +165,21 @@ def load_bundle(csv_root: Path, protocol: str, label: str, run: int) -> Bundle |
         congestion_windows[other],
         congestion_windows[suppressed],
         background_goodput,
+        {name: queue for name, queue in queues.items() if queue is not None},
     )
 
 
 def series_end(bundle: Bundle) -> float:
     return max(
         float(series.index.max())
-        for series in (bundle.goodput, bundle.path1, bundle.path2, bundle.cwnd1, bundle.cwnd2)
+        for series in (
+            bundle.goodput,
+            bundle.path1,
+            bundle.path2,
+            bundle.cwnd1,
+            bundle.cwnd2,
+            *bundle.queues.values(),
+        )
     )
 
 
@@ -218,6 +243,12 @@ def build_run_summary(bundle: Bundle) -> dict[str, float | int | str]:
         "path2_cwnd_final_packets": mean_value(bundle.cwnd2, final_start, end, MSS_BYTES),
         "background_contested_mbps": float(background_values(bundle, contested_grid).mean() / 1e6),
         "final_goodput_mbps": mean_value(bundle.goodput, final_start, end, 1e6),
+        "path1_queue_contested_packets": mean_value(
+            bundle.queues["Path 1"], CONTESTED_START, COMPETITION_END
+        ),
+        "path2_queue_contested_packets": mean_value(
+            bundle.queues["Path 2"], CONTESTED_START, COMPETITION_END
+        ),
         "cwnd_recovery_time_s": cwnd_recovery,
         "cwnd_recovery_success": cwnd_success,
         "cwnd_recovery_deficit_packet_seconds": cwnd_deficit,
@@ -248,34 +279,6 @@ def aggregate_summary(run_summary: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def errors(summary: pd.DataFrame, column: str) -> np.ndarray:
-    return summary[f"{column}_std"].fillna(0).to_numpy(dtype=float)
-
-
-def save_responsiveness_plot(summary: pd.DataFrame, out_dir: Path) -> None:
-    labels = summary["label"].tolist()
-    x = np.arange(len(summary))
-    fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.6))
-
-    column = "cwnd_recovery_time_s"
-    axes[0].bar(x, summary[column], yerr=errors(summary, column), capsize=3)
-    axes[0].set_title("Recovery Time")
-    axes[0].set_ylabel("Seconds")
-
-    column = "cwnd_recovery_deficit_packet_seconds"
-    axes[1].bar(x, summary[column], yerr=errors(summary, column), capsize=3)
-    axes[1].set_title("Recovery Deficit")
-    axes[1].set_ylabel("Packet-seconds")
-
-    for ax in axes:
-        ax.set_xticks(x, labels, rotation=18, ha="right")
-        ax.grid(True, axis="y", alpha=0.3)
-    fig.suptitle("Responsiveness")
-    fig.tight_layout()
-    fig.savefig(out_dir / "responsiveness.pdf")
-    plt.close(fig)
-
-
 def band(
     ax, grid: np.ndarray, series: list[pd.Series], label: str, divisor: float = 1e6
 ) -> None:
@@ -288,14 +291,6 @@ def band(
     ax.fill_between(grid, np.maximum(mean - std, 0), mean + std, alpha=0.18)
 
 
-def background_band(ax, grid: np.ndarray, bundles: list[Bundle]) -> None:
-    matrix = np.vstack([background_values(bundle, grid) / 1e6 for bundle in bundles])
-    mean = matrix.mean(axis=0)
-    std = matrix.std(axis=0)
-    ax.plot(grid, mean, linestyle="--", label="Competing flows")
-    ax.fill_between(grid, np.maximum(mean - std, 0), mean + std, alpha=0.12)
-
-
 def mark_competition(ax) -> None:
     ax.axvspan(COMPETITION_START, COMPETITION_END, color="grey", alpha=0.12)
     ax.axvline(COMPETITION_START, color="grey", linestyle=":", linewidth=1)
@@ -304,101 +299,237 @@ def mark_competition(ax) -> None:
     ax.grid(True, alpha=0.3)
 
 
-def save_main_connection_goodput(
-    grouped: dict[str, list[Bundle]], out_dir: Path
+def save_goodput_small_multiples(
+    grouped: dict[str, list[Bundle]],
+    out_dir: Path,
+    combined_pdf: PdfPages,
 ) -> None:
     bundles = [bundle for group in grouped.values() for bundle in group]
     if not bundles:
         return
     end = max(series_end(bundle) for bundle in bundles)
-    grid = np.arange(0.0, end + SAMPLE_SECONDS, SAMPLE_SECONDS)
-    fig, ax = plt.subplots(figsize=(9.5, 4.6))
-    for protocol, label in PROTOCOLS:
+    grid = np.arange(BASELINE_START, end + SAMPLE_SECONDS, SAMPLE_SECONDS)
+    fig, axes = plt.subplots(2, 3, figsize=(13.0, 7.2), sharex=True, sharey=True)
+    for ax, (protocol, label) in zip(axes.flat, PROTOCOLS):
         group = grouped.get(protocol, [])
         if group:
             band(ax, grid, [bundle.goodput for bundle in group], label)
-    ax.axhline(
+        ax.axhline(
+            2 * PATH_CAPACITY_MBPS,
+            color="black",
+            linestyle="--",
+            linewidth=1,
+        )
+        ax.set_title(label)
+        mark_competition(ax)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Goodput (Mbps)")
+    fig.suptitle("Main Connection Goodput")
+    save_figure(fig, out_dir / "goodput.pdf", combined_pdf)
+
+
+def save_phase_heatmap(
+    summary: pd.DataFrame,
+    out_dir: Path,
+    combined_pdf: PdfPages,
+) -> None:
+    columns = ["path2_baseline_mbps", "path2_contested_mbps", "path2_final_mbps"]
+    means = summary[columns].to_numpy(dtype=float)
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    annotated_heatmap(
+        ax,
+        means,
+        summary["label"].tolist(),
+        ["Before", "During", "After"],
+        "Path 2 throughput (Mbps)",
+        annotations=mean_std_annotations(means, deviations, decimals=2),
+        cmap="viridis",
+    )
+    ax.set_title("Path 2 Response")
+    ax.set_xlabel("Competition phase")
+    save_figure(fig, out_dir / "path2_response.pdf", combined_pdf)
+
+
+def save_responsiveness_plot(
+    run_summary: pd.DataFrame,
+    summary: pd.DataFrame,
+    out_dir: Path,
+    combined_pdf: PdfPages,
+) -> None:
+    labels = summary["label"].tolist()
+    positions = np.arange(len(labels))
+    fig, axes = plt.subplots(1, 2, figsize=(12.0, 5.2), sharey=True)
+    tick_labels = []
+
+    for position, (protocol, label) in enumerate(zip(summary["protocol"], labels)):
+        runs = run_summary[run_summary["protocol"] == protocol]
+        recovery_times = runs["throughput_recovery_time_s"].dropna().to_numpy(dtype=float)
+        deficits = runs["throughput_recovery_deficit_mbit"].dropna().to_numpy(dtype=float)
+        tick_labels.append(f"{label} ({len(recovery_times)}/{len(runs)})")
+
+        if len(recovery_times):
+            jitter = np.linspace(-0.1, 0.1, len(recovery_times))
+            axes[0].scatter(recovery_times, position + jitter, s=20, alpha=0.45)
+            axes[0].errorbar(
+                float(np.mean(recovery_times)),
+                position,
+                xerr=float(np.std(recovery_times)),
+                fmt="D",
+                color="black",
+                capsize=3,
+            )
+        if len(deficits):
+            jitter = np.linspace(-0.1, 0.1, len(deficits))
+            axes[1].scatter(deficits, position + jitter, s=20, alpha=0.45)
+            axes[1].errorbar(
+                float(np.mean(deficits)),
+                position,
+                xerr=float(np.std(deficits)),
+                fmt="D",
+                color="black",
+                capsize=3,
+            )
+
+    axes[0].set_title("Recovery Time")
+    axes[0].set_xlabel("Seconds after competition")
+    axes[1].set_title("Recovery Deficit")
+    axes[1].set_xlabel("Mbit")
+    axes[0].set_yticks(positions, tick_labels)
+    axes[0].invert_yaxis()
+    for ax in axes:
+        ax.grid(True, axis="x", alpha=0.3)
+    fig.suptitle("Responsiveness (recovered runs / total)")
+    save_figure(fig, out_dir / "responsiveness.pdf", combined_pdf)
+
+
+def save_queue_heatmap(
+    summary: pd.DataFrame,
+    out_dir: Path,
+    combined_pdf: PdfPages,
+) -> None:
+    columns = ["path1_queue_contested_packets", "path2_queue_contested_packets"]
+    means = summary[columns].to_numpy(dtype=float)
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
+    fig, ax = plt.subplots(figsize=(7.5, 5.2))
+    annotated_heatmap(
+        ax,
+        means,
+        summary["label"].tolist(),
+        ["Path 1", "Path 2"],
+        "Queue occupancy (packets)",
+        annotations=mean_std_annotations(means, deviations, decimals=1),
+        cmap="magma",
+    )
+    ax.set_title("Queues During Competition")
+    save_figure(fig, out_dir / "queues.pdf", combined_pdf)
+
+
+def individual_output_dir(bundle: Bundle, out_root: Path) -> Path:
+    out_dir = out_root / "individual" / bundle.protocol / f"run{bundle.run}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def individual_grid(bundle: Bundle) -> np.ndarray:
+    return np.arange(BASELINE_START, series_end(bundle) + SAMPLE_SECONDS, SAMPLE_SECONDS)
+
+
+def save_individual_goodput_plot(
+    bundle: Bundle,
+    grid: np.ndarray,
+    out_dir: Path,
+) -> None:
+    fig, axes = plt.subplots(2, 1, figsize=(10.0, 7.0), sharex=True)
+    axes[0].plot(grid, resample(bundle.goodput, grid) / 1e6, label="Main connection")
+    axes[0].axhline(
         2 * PATH_CAPACITY_MBPS,
         color="black",
         linestyle="--",
         linewidth=1,
         label="Total capacity",
     )
-    ax.set_title("Main Connection Goodput")
-    ax.set_ylabel("Mbps")
-    ax.legend(fontsize=8)
-    mark_competition(ax)
-    fig.tight_layout()
-    fig.savefig(out_dir / "main_connection_goodput.pdf")
-    plt.close(fig)
+    axes[0].set_title("Aggregate goodput")
+    axes[0].set_ylabel("Mbps")
+    axes[0].legend()
+
+    axes[1].plot(grid, resample(bundle.path1, grid) / 1e6, label="Path 1")
+    axes[1].plot(grid, resample(bundle.path2, grid) / 1e6, label="Path 2")
+    axes[1].plot(
+        grid,
+        background_values(bundle, grid) / 1e6,
+        linestyle="--",
+        label="Competing flows",
+    )
+    axes[1].axhline(
+        PATH_CAPACITY_MBPS,
+        color="black",
+        linestyle="--",
+        linewidth=1,
+        label="Path capacity",
+    )
+    axes[1].set_title("Path throughput")
+    axes[1].set_ylabel("Mbps")
+    axes[1].legend(ncol=4, fontsize=8)
+    for ax in axes:
+        mark_competition(ax)
+    fig.suptitle(f"{bundle.label}, Run {bundle.run}")
+    save_figure(fig, out_dir / "goodput.pdf")
 
 
-def save_individual_cwnd_plot(bundle: Bundle, out_root: Path) -> None:
-    out_dir = out_root / "by_protocol" / bundle.protocol / "runs" / f"run{bundle.run}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(9.5, 4.6))
+def save_individual_cwnd_plot(
+    bundle: Bundle,
+    grid: np.ndarray,
+    out_dir: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
     ax.step(
-        bundle.cwnd1.index,
-        bundle.cwnd1.to_numpy(dtype=float) / MSS_BYTES,
+        grid,
+        resample(bundle.cwnd1, grid) / MSS_BYTES,
         where="post",
         label="Path 1",
     )
     ax.step(
-        bundle.cwnd2.index,
-        bundle.cwnd2.to_numpy(dtype=float) / MSS_BYTES,
+        grid,
+        resample(bundle.cwnd2, grid) / MSS_BYTES,
         where="post",
         label="Path 2",
     )
-    ax.set_title(f"{bundle.label} Run {bundle.run}: Subflow cwnd")
-    ax.set_ylabel("Packets")
+    ax.set_title(f"{bundle.label}, Run {bundle.run}")
+    ax.set_ylabel("cwnd (packets)")
     ax.legend()
     mark_competition(ax)
-    fig.tight_layout()
-    fig.savefig(out_dir / "subflow_cwnd.pdf")
-    plt.close(fig)
+    save_figure(fig, out_dir / "cwnd.pdf")
 
 
-def save_protocol_plot(protocol: str, label: str, bundles: list[Bundle], out_root: Path) -> None:
-    out_dir = out_root / "by_protocol" / protocol
-    out_dir.mkdir(parents=True, exist_ok=True)
-    end = max(series_end(bundle) for bundle in bundles)
-    grid = np.arange(0.0, end + SAMPLE_SECONDS, SAMPLE_SECONDS)
+def save_individual_queue_plot(
+    bundle: Bundle,
+    grid: np.ndarray,
+    out_dir: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(9.5, 4.8))
+    for name in ("Path 1", "Path 2"):
+        ax.step(
+            grid,
+            resample(bundle.queues[name], grid),
+            where="post",
+            label=name,
+        )
+    ax.set_title(f"{bundle.label}, Run {bundle.run}")
+    ax.set_ylabel("Queue occupancy (packets)")
+    ax.legend()
+    mark_competition(ax)
+    save_figure(fig, out_dir / "queues.pdf")
 
-    fig, axes = plt.subplots(1, 3, figsize=(15.5, 4.5))
-    band(axes[0], grid, [bundle.path1 for bundle in bundles], "Path 1")
-    band(axes[0], grid, [bundle.path2 for bundle in bundles], "Path 2")
-    background_band(axes[0], grid, bundles)
-    axes[0].axhline(
-        PATH_CAPACITY_MBPS, color="black", linestyle="--", linewidth=1, label="Path capacity"
-    )
-    axes[0].set_title("Throughput")
-    axes[0].set_ylabel("Mbps")
-    axes[0].legend()
 
-    band(axes[1], grid, [bundle.cwnd1 for bundle in bundles], "Path 1", MSS_BYTES)
-    band(axes[1], grid, [bundle.cwnd2 for bundle in bundles], "Path 2", MSS_BYTES)
-    axes[1].set_title("Congestion Window")
-    axes[1].set_ylabel("Packets")
-    axes[1].legend()
-
-    band(axes[2], grid, [bundle.goodput for bundle in bundles], "Aggregate")
-    axes[2].axhline(
-        2 * PATH_CAPACITY_MBPS,
-        color="black",
-        linestyle="--",
-        linewidth=1,
-        label="Total capacity",
-    )
-    axes[2].set_title("Goodput")
-    axes[2].set_ylabel("Mbps")
-    axes[2].legend()
-
-    for ax in axes:
-        mark_competition(ax)
-    fig.suptitle(label)
-    fig.tight_layout()
-    fig.savefig(out_dir / "responsiveness.pdf")
-    plt.close(fig)
+def save_individual_plots(bundle: Bundle, out_root: Path) -> None:
+    grid = individual_grid(bundle)
+    if len(grid) == 0:
+        return
+    out_dir = individual_output_dir(bundle, out_root)
+    save_individual_goodput_plot(bundle, grid, out_dir)
+    save_individual_cwnd_plot(bundle, grid, out_dir)
+    save_individual_queue_plot(bundle, grid, out_dir)
 
 
 def selected_runs(args: argparse.Namespace) -> list[int]:
@@ -434,19 +565,20 @@ def main() -> int:
     summary = aggregate_summary(run_summary)
     run_summary.to_csv(out_dir / "summary_runs.csv", index=False)
     summary.to_csv(out_dir / "summary.csv", index=False)
-    save_responsiveness_plot(summary, aggregate_dir)
 
     grouped: dict[str, list[Bundle]] = defaultdict(list)
     for bundle in bundles:
         grouped[bundle.protocol].append(bundle)
-    save_main_connection_goodput(grouped, aggregate_dir)
-    for protocol, label in PROTOCOLS:
-        if protocol in grouped:
-            save_protocol_plot(protocol, label, grouped[protocol], out_dir)
+    with PdfPages(out_dir / "aggregate.pdf") as combined_pdf:
+        save_goodput_small_multiples(grouped, aggregate_dir, combined_pdf)
+        save_phase_heatmap(summary, aggregate_dir, combined_pdf)
+        save_responsiveness_plot(run_summary, summary, aggregate_dir, combined_pdf)
+        save_queue_heatmap(summary, aggregate_dir, combined_pdf)
     for bundle in bundles:
-        save_individual_cwnd_plot(bundle, out_dir)
+        save_individual_plots(bundle, out_dir)
 
     print(f"wrote experiment 4 plots under {out_dir}")
+    print(f"wrote combined aggregate plots to {out_dir / 'aggregate.pdf'}")
     return 0
 
 
