@@ -17,8 +17,11 @@ from pathlib import Path
 CONFIGS = [
     ("MpOrbUncoupled", "mporb", "experiment2_mporb.ini"),
     ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment2_mporb_semicoupled_alpha.ini"),
+    ("MpOrbOlia", "mporb_olia", "experiment2_mporb_olia.ini"),
+    ("MpOrbSemiCoupledBeta", "mporb_semicoupled_beta", "experiment2_mporb_semicoupled_beta.ini"),
     ("MpOrbSemiCoupledDelta", "mporb_semicoupled_delta", "experiment2_mporb_semicoupled_delta.ini"),
     ("MpOrbSemiCoupledEpsilon", "mporb_semicoupled_epsilon", "experiment2_mporb_semicoupled_epsilon.ini"),
+    ("MpOrbSemiCoupledZeta", "mporb_semicoupled_zeta", "experiment2_mporb_semicoupled_zeta.ini"),
     ("LiaCoupled", "lia", "experiment2_lia.ini"),
     ("OliaCoupled", "olia", "experiment2_olia.ini"),
     ("BaliaCoupled", "balia", "experiment2_balia.ini"),
@@ -26,8 +29,11 @@ CONFIGS = [
 DEFAULT_CONFIGS = [
     "MpOrbUncoupled",
     "MpOrbSemiCoupledAlpha",
+    "MpOrbOlia",
+    "MpOrbSemiCoupledBeta",
     "MpOrbSemiCoupledDelta",
     "MpOrbSemiCoupledEpsilon",
+    "MpOrbSemiCoupledZeta",
     "LiaCoupled",
     "OliaCoupled",
     "BaliaCoupled",

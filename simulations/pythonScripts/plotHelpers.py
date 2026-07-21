@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.backends.backend_pdf import PdfPages
 
+HIGH_IS_GOOD_CMAP = "RdYlGn"
+LOW_IS_GOOD_CMAP = "RdYlGn_r"
+
 
 def mean_std_annotations(
     means: np.ndarray,
@@ -30,6 +33,13 @@ def mean_std_annotations(
     return annotations
 
 
+def target_closeness(values: np.ndarray, targets: np.ndarray | float) -> np.ndarray:
+    values = np.asarray(values, dtype=float)
+    targets = np.broadcast_to(np.asarray(targets, dtype=float), values.shape)
+    scale = np.maximum(np.abs(targets), np.finfo(float).eps)
+    return np.clip(1.0 - np.abs(values - targets) / scale, 0.0, 1.0)
+
+
 def annotated_heatmap(
     ax,
     values: np.ndarray,
@@ -38,11 +48,15 @@ def annotated_heatmap(
     colorbar_label: str,
     *,
     annotations: np.ndarray | None = None,
-    cmap: str = "viridis",
+    color_values: np.ndarray | None = None,
+    cmap: str = HIGH_IS_GOOD_CMAP,
     norm=None,
 ) -> None:
     values = np.asarray(values, dtype=float)
-    image = ax.imshow(np.ma.masked_invalid(values), aspect="auto", cmap=cmap, norm=norm)
+    color_values = values if color_values is None else np.asarray(color_values, dtype=float)
+    if color_values.shape != values.shape:
+        raise ValueError("heatmap color values must match the annotated values")
+    image = ax.imshow(np.ma.masked_invalid(color_values), aspect="auto", cmap=cmap, norm=norm)
     ax.set_xticks(np.arange(len(column_labels)), column_labels)
     ax.set_yticks(np.arange(len(row_labels)), row_labels)
     ax.tick_params(axis="x", labelrotation=20)
@@ -51,10 +65,11 @@ def annotated_heatmap(
         annotations = mean_std_annotations(values)
     for row, column in np.ndindex(values.shape):
         value = values[row, column]
-        if not np.isfinite(value):
+        color_value = color_values[row, column]
+        if not np.isfinite(value) or not np.isfinite(color_value):
             text_color = "#333333"
         else:
-            red, green, blue, _alpha = image.cmap(image.norm(value))
+            red, green, blue, _alpha = image.cmap(image.norm(color_value))
             luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
             text_color = "black" if luminance > 0.58 else "white"
         ax.text(

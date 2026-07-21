@@ -13,10 +13,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import Normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plotHelpers import annotated_heatmap, mean_std_annotations, save_figure
+from plotHelpers import (
+    HIGH_IS_GOOD_CMAP,
+    LOW_IS_GOOD_CMAP,
+    annotated_heatmap,
+    mean_std_annotations,
+    save_figure,
+    target_closeness,
+)
 
 PROTOCOLS = [
     ("lia", "LIA"),
@@ -24,8 +31,11 @@ PROTOCOLS = [
     ("balia", "BALIA"),
     ("mporb", "MPORB Uncoupled"),
     ("mporb_alpha", "MPORB Alpha"),
+    ("mporb_olia", "MPORB OLIA"),
+    ("mporb_beta", "MPORB Beta"),
     ("mporb_delta", "MPORB Delta"),
     ("mporb_epsilon", "MPORB Epsilon"),
+    ("mporb_zeta", "MPORB Zeta"),
 ]
 MSS_BYTES = 1448
 RTT_SECONDS = 0.05
@@ -48,7 +58,7 @@ CONNECTIONS = {
     **{
         user: (
             f"Red {user - USERS_PER_TYPE + 1}",
-            ("y1: X then T", "y2: T"),
+            ("y2: T", "y1: X then T"),
         )
         for user in RED_USERS
     },
@@ -168,8 +178,8 @@ def build_run_summary(bundle: Bundle, analysis_start: float) -> dict[str, float 
     red_total = sum(connection_goodput[user] for user in RED_USERS)
     x1 = sum(mean_mbps(bundle.subflows[user][0], grid) for user in BLUE_USERS)
     x2 = sum(mean_mbps(bundle.subflows[user][1], grid) for user in BLUE_USERS)
-    y1 = sum(mean_mbps(bundle.subflows[user][0], grid) for user in RED_USERS)
-    y2 = sum(mean_mbps(bundle.subflows[user][1], grid) for user in RED_USERS)
+    y1 = sum(mean_mbps(bundle.subflows[user][1], grid) for user in RED_USERS)
+    y2 = sum(mean_mbps(bundle.subflows[user][0], grid) for user in RED_USERS)
     aggregate = blue_total + red_total
     row: dict[str, float | int | str] = {
         "run": bundle.run,
@@ -222,29 +232,30 @@ def save_goodput_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = [f"connection_{user}_goodput_mbps" for user in range(USER_COUNT)]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
     ideal_per_connection = IDEAL_AGGREGATE_MBPS / USER_COUNT
-    maximum = max(float(np.nanmax(means)), ideal_per_connection * 1.35)
-    norm = TwoSlopeNorm(vmin=0.0, vcenter=ideal_per_connection, vmax=maximum)
+    quality = target_closeness(means, ideal_per_connection)
     connection_labels = [
         *(f"B{index + 1}" for index in range(USERS_PER_TYPE)),
         *(f"R{index + 1}" for index in range(USERS_PER_TYPE)),
     ]
 
-    fig, ax = plt.subplots(figsize=(12.0, 5.4))
+    fig, ax = plt.subplots(figsize=(11.0, 7.5))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         connection_labels,
-        f"Goodput (Mbps), equal share = {ideal_per_connection:.2f}",
+        summary["label"].tolist(),
+        f"Closeness to equal share ({ideal_per_connection:.2f} Mbps)",
         annotations=mean_std_annotations(means, deviations, decimals=2),
-        cmap="coolwarm",
-        norm=norm,
+        color_values=quality,
+        cmap=HIGH_IS_GOOD_CMAP,
+        norm=Normalize(vmin=0.0, vmax=1.0),
     )
     ax.set_title("Connection Goodput")
-    ax.set_xlabel("Main connection")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Main connection")
     save_figure(fig, out_dir / "goodput.pdf", combined_pdf)
 
 
@@ -292,19 +303,33 @@ def save_path_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = ["blue_x1_mbps", "blue_x2_mbps", "red_y1_mbps", "red_y2_mbps"]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(9.5, 5.3))
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
+    ideal_population_goodput = USERS_PER_TYPE * IDEAL_AGGREGATE_MBPS / USER_COUNT
+    ideal_targets = np.array(
+        [
+            X_CAPACITY_MBPS - IDEAL_TOTAL_PROBE_MBPS,
+            ideal_population_goodput - X_CAPACITY_MBPS + IDEAL_TOTAL_PROBE_MBPS,
+            IDEAL_TOTAL_PROBE_MBPS,
+            ideal_population_goodput - IDEAL_TOTAL_PROBE_MBPS,
+        ]
+    )
+    quality = target_closeness(means, ideal_targets[:, np.newaxis])
+    fig, ax = plt.subplots(figsize=(10.5, 5.3))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         ["Blue x1\nX", "Blue x2\nT", "Red y1\nX then T", "Red y2\nT"],
-        "Population subflow goodput (Mbps)",
+        summary["label"].tolist(),
+        "Closeness to ideal path allocation",
         annotations=mean_std_annotations(means, deviations, decimals=2),
-        cmap="magma",
+        color_values=quality,
+        cmap=HIGH_IS_GOOD_CMAP,
+        norm=Normalize(vmin=0.0, vmax=1.0),
     )
     ax.set_title("Path Allocation")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Population path")
     save_figure(fig, out_dir / "path_allocation.pdf", combined_pdf)
 
 
@@ -314,20 +339,21 @@ def save_queue_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = ["x_queue_packets", "t_queue_packets"]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(7.5, 5.2))
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
+    fig, ax = plt.subplots(figsize=(10.5, 4.2))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         ["X", "T"],
+        summary["label"].tolist(),
         "Queue occupancy (packets)",
         annotations=mean_std_annotations(means, deviations, decimals=1),
-        cmap="magma",
+        cmap=LOW_IS_GOOD_CMAP,
     )
     ax.set_title("Queues")
-    ax.set_xlabel("Bottleneck")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Bottleneck")
     save_figure(fig, out_dir / "queues.pdf", combined_pdf)
 
 

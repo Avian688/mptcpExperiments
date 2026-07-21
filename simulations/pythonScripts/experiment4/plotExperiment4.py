@@ -14,9 +14,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.colors import Normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plotHelpers import annotated_heatmap, mean_std_annotations, save_figure
+from plotHelpers import (
+    HIGH_IS_GOOD_CMAP,
+    LOW_IS_GOOD_CMAP,
+    annotated_heatmap,
+    mean_std_annotations,
+    save_figure,
+    target_closeness,
+)
 
 MSS_BYTES = 1448
 PATH_CAPACITY_MBPS = 20.0
@@ -41,8 +49,11 @@ PROTOCOLS = [
     ("balia", "BALIA"),
     ("mporb", "MPORB Uncoupled"),
     ("mporb_alpha", "MPORB Alpha"),
+    ("mporb_olia", "MPORB OLIA"),
+    ("mporb_beta", "MPORB Beta"),
     ("mporb_delta", "MPORB Delta"),
     ("mporb_epsilon", "MPORB Epsilon"),
+    ("mporb_zeta", "MPORB Zeta"),
 ]
 
 
@@ -334,20 +345,31 @@ def save_phase_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = ["path2_baseline_mbps", "path2_contested_mbps", "path2_final_mbps"]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
+    expected_rates = np.array(
+        [
+            PATH_CAPACITY_MBPS,
+            PATH_CAPACITY_MBPS / (BACKGROUND_FLOW_COUNT + 1),
+            PATH_CAPACITY_MBPS,
+        ]
+    )
+    quality = target_closeness(means, expected_rates[:, np.newaxis])
+    fig, ax = plt.subplots(figsize=(10.5, 4.8))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         ["Before", "During", "After"],
-        "Path 2 throughput (Mbps)",
+        summary["label"].tolist(),
+        "Closeness to expected phase throughput",
         annotations=mean_std_annotations(means, deviations, decimals=2),
-        cmap="viridis",
+        color_values=quality,
+        cmap=HIGH_IS_GOOD_CMAP,
+        norm=Normalize(vmin=0.0, vmax=1.0),
     )
     ax.set_title("Path 2 Response")
-    ax.set_xlabel("Competition phase")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Competition phase")
     save_figure(fig, out_dir / "path2_response.pdf", combined_pdf)
 
 
@@ -409,19 +431,21 @@ def save_queue_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = ["path1_queue_contested_packets", "path2_queue_contested_packets"]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(7.5, 5.2))
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
+    fig, ax = plt.subplots(figsize=(10.5, 4.2))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         ["Path 1", "Path 2"],
+        summary["label"].tolist(),
         "Queue occupancy (packets)",
         annotations=mean_std_annotations(means, deviations, decimals=1),
-        cmap="magma",
+        cmap=LOW_IS_GOOD_CMAP,
     )
     ax.set_title("Queues During Competition")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Bottleneck")
     save_figure(fig, out_dir / "queues.pdf", combined_pdf)
 
 

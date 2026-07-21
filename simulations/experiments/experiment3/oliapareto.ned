@@ -120,13 +120,14 @@ network oliapareto
             blueTExit.pppg++ <--> delay12_5ms <--> server[i].pppg++;
         }
 
-        // Red y1 through X then T and y2 through T, both with 50 ms base RTT.
+        // Red y2 is slot 0; inefficient y1 is slot 1 and can join later.
+        // Both paths retain a 50 ms base RTT.
         tEgress.pppg++ <--> fast0ms <--> redXExit.pppg++;
         tEgress.pppg++ <--> fast0ms <--> redTExit.pppg++;
         for i=0..usersPerType-1 {
-            client[usersPerType + i].pppg++ <--> delay5ms <--> xIngress.pppg++;
             client[usersPerType + i].pppg++ <--> delay15ms <--> tIngress.pppg++;
-            redXExit.pppg++ <--> delay10ms <--> server[usersPerType + i].pppg++;
+            client[usersPerType + i].pppg++ <--> delay5ms <--> xIngress.pppg++;
             redTExit.pppg++ <--> delay10ms <--> server[usersPerType + i].pppg++;
+            redXExit.pppg++ <--> delay10ms <--> server[usersPerType + i].pppg++;
         }
 }

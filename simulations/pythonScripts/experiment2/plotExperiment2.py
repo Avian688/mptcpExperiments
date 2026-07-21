@@ -13,16 +13,26 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.colors import TwoSlopeNorm
+from matplotlib.colors import Normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from plotHelpers import annotated_heatmap, mean_std_annotations, save_figure
+from plotHelpers import (
+    HIGH_IS_GOOD_CMAP,
+    LOW_IS_GOOD_CMAP,
+    annotated_heatmap,
+    mean_std_annotations,
+    save_figure,
+    target_closeness,
+)
 
 PROTOCOLS = [
     ("mporb", "MPORB Uncoupled"),
     ("mporb_semicoupled_alpha", "Alpha"),
+    ("mporb_olia", "MPORB OLIA"),
+    ("mporb_semicoupled_beta", "Beta"),
     ("mporb_semicoupled_delta", "Delta"),
     ("mporb_semicoupled_epsilon", "Epsilon"),
+    ("mporb_semicoupled_zeta", "Zeta"),
     ("lia", "LIA"),
     ("olia", "OLIA"),
     ("balia", "BALIA"),
@@ -261,25 +271,26 @@ def save_goodput_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = [f"user_{user}_run_average_goodput_mbps" for user in ("A", "B", "C")]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
     equal_share = TOTAL_PATH_CAPACITY_MBPS / len(USERS)
-    maximum = max(float(np.nanmax(means)), equal_share * 1.35)
-    norm = TwoSlopeNorm(vmin=0.0, vcenter=equal_share, vmax=maximum)
+    quality = target_closeness(means, equal_share)
 
-    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    fig, ax = plt.subplots(figsize=(10.5, 4.8))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         ["A", "B", "C"],
-        f"Goodput (Mbps), equal share = {equal_share:.1f}",
+        summary["label"].tolist(),
+        f"Closeness to equal share ({equal_share:.1f} Mbps)",
         annotations=mean_std_annotations(means, deviations),
-        cmap="coolwarm",
-        norm=norm,
+        color_values=quality,
+        cmap=HIGH_IS_GOOD_CMAP,
+        norm=Normalize(vmin=0.0, vmax=1.0),
     )
     ax.set_title("Connection Goodput")
-    ax.set_xlabel("Main connection")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Main connection")
     save_figure(fig, out_dir / "goodput.pdf", combined_pdf)
 
 
@@ -328,20 +339,21 @@ def save_queue_heatmap(
     combined_pdf: PdfPages,
 ) -> None:
     columns = [f"path_{path}_post_join_queue_packets" for path in PATH_QUEUE_MODULES]
-    means = summary[columns].to_numpy(dtype=float)
-    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float)
-    fig, ax = plt.subplots(figsize=(11.0, 5.2))
+    means = summary[columns].to_numpy(dtype=float).T
+    deviations = summary[[f"{column}_std" for column in columns]].to_numpy(dtype=float).T
+    fig, ax = plt.subplots(figsize=(10.5, 6.5))
     annotated_heatmap(
         ax,
         means,
-        summary["label"].tolist(),
         [str(path) for path in PATH_QUEUE_MODULES],
+        summary["label"].tolist(),
         "Queue occupancy (packets)",
         annotations=mean_std_annotations(means, deviations, decimals=0),
-        cmap="magma",
+        cmap=LOW_IS_GOOD_CMAP,
     )
     ax.set_title("Queues")
-    ax.set_xlabel("Path (1-4 shared, 5-8 private)")
+    ax.set_xlabel("Protocol")
+    ax.set_ylabel("Path (1-4 shared, 5-8 private)")
     save_figure(fig, out_dir / "queues.pdf", combined_pdf)
 
 

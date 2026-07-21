@@ -15,8 +15,10 @@ X_MBPS = 27
 T_MBPS = 36
 SIM_TIME_LIMIT_S = 150
 RUNS = range(1, 6)
-START_RANDOM_WINDOW_S = 2.0
+START_RANDOM_WINDOW_S = 0.5
 START_RANDOM_SEED = 3999
+RED_Y1_START_DELAY_S = 30
+ONE_MSS_INITIAL_SSTHRESH_PROTOCOLS = {"olia", "balia"}
 
 PROTOCOLS = {
     "lia": {
@@ -49,6 +51,18 @@ PROTOCOLS = {
         "algorithm_class": "MpOrbSemiCoupledAlpha",
         "description": "MPORB Alpha",
     },
+    "mporb_olia": {
+        "config": "MpOrbOlia",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbOlia",
+        "description": "MPORB OLIA",
+    },
+    "mporb_beta": {
+        "config": "MpOrbBeta",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbSemiCoupledBeta",
+        "description": "MPORB Beta",
+    },
     "mporb_delta": {
         "config": "MpOrbDelta",
         "tcp_type": "MpOrb",
@@ -60,6 +74,12 @@ PROTOCOLS = {
         "tcp_type": "MpOrb",
         "algorithm_class": "MpOrbSemiCoupledEpsilon",
         "description": "MPORB Epsilon",
+    },
+    "mporb_zeta": {
+        "config": "MpOrbZeta",
+        "tcp_type": "MpOrb",
+        "algorithm_class": "MpOrbSemiCoupledZeta",
+        "description": "MPORB Zeta",
     },
 }
 
@@ -73,7 +93,10 @@ def highest_bdp_packets() -> int:
     return math.ceil(T_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
 
 
-def initial_ssthresh_bytes() -> int:
+def initial_ssthresh_bytes(protocol: str) -> int:
+    if protocol in ONE_MSS_INITIAL_SSTHRESH_PROTOCOLS:
+        return MSS_BYTES
+
     packets = math.ceil(
         X_MBPS
         * 1_000_000
@@ -120,7 +143,7 @@ def client_configuration_lines() -> list[str]:
         if user < USERS_PER_TYPE:
             remote_addresses = f"server[{user}]>blueXExit server[{user}]>blueTExit"
         else:
-            remote_addresses = f"server[{user}]>redXExit server[{user}]>redTExit"
+            remote_addresses = f"server[{user}]>redTExit server[{user}]>redXExit"
         lines.extend(
             [
                 f'*.client[{user}].app[0].connectAddress = "server[{user}]"',
@@ -180,7 +203,7 @@ def write_routes_xml() -> Path:
     return path
 
 
-def write_common_general(write) -> None:
+def write_common_general(write, protocol: str) -> None:
     queue_packets = highest_bdp_packets()
     lines = (
         "[General]",
@@ -200,10 +223,15 @@ def write_common_general(write) -> None:
         "# OLIA motivation: Red y1 crosses both X and T, so each Mbps on y1",
         "# consumes two bottlenecks and reduces achievable aggregate goodput by one Mbps.",
         "# Blue paths: x1=X, x2=T. Red paths: y1=X->T, y2=T.",
+        f"# Blue opens both paths immediately; Red opens y2 first and y1 after {RED_Y1_START_DELAY_S} s.",
         f"# All paths have {PATH_RTT_MS} ms base RTT; X={X_MBPS} Mbps and T={T_MBPS} Mbps.",
         f"# Every queue uses the higher BDP: {queue_packets} packets at MSS {MSS_BYTES}.",
         "**.numberOfSubflows = 2",
         "**.startAllSubflowsAtBeginning = true",
+        *(
+            f'*.client[{user}].tcp.subflowStartTimes = "0s {RED_Y1_START_DELAY_S}s"'
+            for user in range(USERS_PER_TYPE, USER_COUNT)
+        ),
         "**.subflowStartTimes = \"\"",
         "*.configurator.config = xmldoc(\"../scenarios/experiment3/routes.xml\")",
         "*.configurator.addDefaultRoutes = false",
@@ -235,7 +263,7 @@ def write_common_general(write) -> None:
         "**.tcp.stopOperationTimeout = 4000s",
         f"**.tcp.mss = {MSS_BYTES}",
         "**.tcp.sackSupport = true",
-        f"**.tcp.initialSsthresh = {initial_ssthresh_bytes()}",
+        f"**.tcp.initialSsthresh = {initial_ssthresh_bytes(protocol)}",
         "**.tcp.sendQueueLimit = 4MiB",
         "**.schedulerMode = \"default\"",
         "",
@@ -253,17 +281,22 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.semiCoupledAlphaSubflowRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledAlphaConnectionRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledAlphaRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaBestPath:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaMaxWindowPath:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaCorrection:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledBetaFairRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledBetaTotalFairRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledBetaFairRateShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaTargetShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaRateShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledDeltaAiShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonPathPrice:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonOpportunity:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonTargetShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonPathCost:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonResponsiveness:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonAiShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonAiRateBudget:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonAdjustedAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledZetaPathCost:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledZetaPathWeight:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledZetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.xIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.tIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
@@ -292,7 +325,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_delta", "mporb_epsilon"} else "**.alpha = 0.01")
+        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_olia", "mporb_beta", "mporb_delta", "mporb_epsilon", "mporb_zeta"} else "**.alpha = 0.01")
         write("**.fixedAvgRTTVal = 0")
     write()
 
@@ -324,7 +357,7 @@ def main() -> None:
             def write(line: str = "") -> None:
                 output.write(line + "\n")
 
-            write_common_general(write)
+            write_common_general(write, protocol)
             write_protocol_settings(write, protocol, settings)
             for run in RUNS:
                 write_config(write, settings, run)

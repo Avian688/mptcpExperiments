@@ -20,8 +20,11 @@ CONFIGS = [
     ("BaliaCoupled", "balia", "experiment3_balia.ini"),
     ("MpOrbUncoupled", "mporb", "experiment3_mporb.ini"),
     ("MpOrbAlpha", "mporb_alpha", "experiment3_mporb_alpha.ini"),
+    ("MpOrbOlia", "mporb_olia", "experiment3_mporb_olia.ini"),
+    ("MpOrbBeta", "mporb_beta", "experiment3_mporb_beta.ini"),
     ("MpOrbDelta", "mporb_delta", "experiment3_mporb_delta.ini"),
     ("MpOrbEpsilon", "mporb_epsilon", "experiment3_mporb_epsilon.ini"),
+    ("MpOrbZeta", "mporb_zeta", "experiment3_mporb_zeta.ini"),
 ]
 DEFAULT_RUNS = 5
 
