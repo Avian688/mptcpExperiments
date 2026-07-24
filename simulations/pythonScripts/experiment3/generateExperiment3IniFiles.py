@@ -63,23 +63,17 @@ PROTOCOLS = {
         "algorithm_class": "MpOrbSemiCoupledBeta",
         "description": "MPORB Beta",
     },
-    "mporb_delta": {
-        "config": "MpOrbDelta",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledDelta",
-        "description": "MPORB Delta",
-    },
     "mporb_epsilon": {
         "config": "MpOrbEpsilon",
         "tcp_type": "MpOrb",
         "algorithm_class": "MpOrbSemiCoupledEpsilon",
         "description": "MPORB Epsilon",
     },
-    "mporb_zeta": {
-        "config": "MpOrbZeta",
+    "mporb_theta": {
+        "config": "MpOrbTheta",
         "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledZeta",
-        "description": "MPORB Zeta",
+        "algorithm_class": "MpOrbSemiCoupledTheta",
+        "description": "MPORB Theta",
     },
 }
 
@@ -229,7 +223,7 @@ def write_common_general(write, protocol: str) -> None:
         "**.numberOfSubflows = 2",
         "**.startAllSubflowsAtBeginning = true",
         *(
-            f'*.client[{user}].tcp.subflowStartTimes = "0s {RED_Y1_START_DELAY_S}s"'
+            f'*.client[{user}].tcp.conn-*.subflowStartTimes = "0s {RED_Y1_START_DELAY_S}s"'
             for user in range(USERS_PER_TYPE, USER_COUNT)
         ),
         "**.subflowStartTimes = \"\"",
@@ -267,8 +261,8 @@ def write_common_general(write, protocol: str) -> None:
         "**.tcp.sendQueueLimit = 4MiB",
         "**.schedulerMode = \"default\"",
         "",
-        "**.goodputInterval = 0.5s",
-        "**.throughputInterval = 0.5s",
+        "**.goodputInterval = 1s",
+        "**.throughputInterval = 1s",
         "**.**.goodput:vector(removeRepeats).vector-recording = true",
         "**.**.goodput.result-recording-modes = vector(removeRepeats)",
         "**.**.tcp.conn-*.throughput:vector(removeRepeats).vector-recording = true",
@@ -284,19 +278,20 @@ def write_common_general(write, protocol: str) -> None:
         "**.**.tcp.conn-*.mpOrbOliaBestPath:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaMaxWindowPath:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaCorrection:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaPathPrice:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaPathOpportunity:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledBetaFairRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledBetaTotalFairRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledBetaFairRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledDeltaTargetShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledDeltaRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledDeltaAiShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonPathCost:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledZetaPathCost:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledZetaPathWeight:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledZetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaFairRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaHeadroomRate:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaAiShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.xIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
         "**.tIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
@@ -325,7 +320,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_olia", "mporb_beta", "mporb_delta", "mporb_epsilon", "mporb_zeta"} else "**.alpha = 0.01")
+        write("**.alpha = 0" if protocol in {"mporb_alpha", "mporb_olia", "mporb_beta", "mporb_epsilon", "mporb_theta"} else "**.alpha = 0.01")
         write("**.fixedAvgRTTVal = 0")
     write()
 

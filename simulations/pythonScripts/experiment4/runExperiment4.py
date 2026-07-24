@@ -22,9 +22,8 @@ CONFIGS = [
     ("MpOrbAlpha", "mporb_alpha", "experiment4_mporb_alpha.ini"),
     ("MpOrbOlia", "mporb_olia", "experiment4_mporb_olia.ini"),
     ("MpOrbBeta", "mporb_beta", "experiment4_mporb_beta.ini"),
-    ("MpOrbDelta", "mporb_delta", "experiment4_mporb_delta.ini"),
     ("MpOrbEpsilon", "mporb_epsilon", "experiment4_mporb_epsilon.ini"),
-    ("MpOrbZeta", "mporb_zeta", "experiment4_mporb_zeta.ini"),
+    ("MpOrbTheta", "mporb_theta", "experiment4_mporb_theta.ini"),
 ]
 DEFAULT_RUNS = 5
 
@@ -380,7 +379,16 @@ def main() -> int:
         if enabled(4, args):
             command = [sys.executable, str(SCRIPT_DIR / "plotExperiment4.py"), "--runs"]
             command.extend(str(run) for run in range(1, args.runs + 1))
-            return subprocess.run(command, cwd=str(SCRIPT_DIR)).returncode
+            result = subprocess.run(command, cwd=str(SCRIPT_DIR))
+            if result.returncode != 0:
+                return result.returncode
+            summary_command = [
+                sys.executable,
+                str(SCRIPT_DIR / "summarizeExperiment4.py"),
+                "--runs",
+            ]
+            summary_command.extend(str(run) for run in range(1, args.runs + 1))
+            return subprocess.run(summary_command, cwd=str(SCRIPT_DIR)).returncode
     except KeyboardInterrupt:
         print("\nCancelled; terminating active child processes.", file=sys.stderr)
         terminate_all_active_processes()

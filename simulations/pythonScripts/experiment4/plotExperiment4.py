@@ -51,9 +51,8 @@ PROTOCOLS = [
     ("mporb_alpha", "MPORB Alpha"),
     ("mporb_olia", "MPORB OLIA"),
     ("mporb_beta", "MPORB Beta"),
-    ("mporb_delta", "MPORB Delta"),
     ("mporb_epsilon", "MPORB Epsilon"),
-    ("mporb_zeta", "MPORB Zeta"),
+    ("mporb_theta", "MPORB Theta"),
 ]
 
 
@@ -318,13 +317,23 @@ def save_goodput_small_multiples(
     bundles = [bundle for group in grouped.values() for bundle in group]
     if not bundles:
         return
+
+    protocols = [item for item in PROTOCOLS if grouped.get(item[0])]
+    column_count = min(3, len(protocols))
+    row_count = (len(protocols) + column_count - 1) // column_count
     end = max(series_end(bundle) for bundle in bundles)
     grid = np.arange(BASELINE_START, end + SAMPLE_SECONDS, SAMPLE_SECONDS)
-    fig, axes = plt.subplots(2, 3, figsize=(13.0, 7.2), sharex=True, sharey=True)
-    for ax, (protocol, label) in zip(axes.flat, PROTOCOLS):
+    fig, axes = plt.subplots(
+        row_count,
+        column_count,
+        figsize=(13.0, 3.6 * row_count),
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+    for ax, (protocol, label) in zip(axes.flat, protocols):
         group = grouped.get(protocol, [])
-        if group:
-            band(ax, grid, [bundle.goodput for bundle in group], label)
+        band(ax, grid, [bundle.goodput for bundle in group], label)
         ax.axhline(
             2 * PATH_CAPACITY_MBPS,
             color="black",
@@ -333,8 +342,11 @@ def save_goodput_small_multiples(
         )
         ax.set_title(label)
         mark_competition(ax)
+    for ax in axes.flat[len(protocols):]:
+        ax.set_visible(False)
     for ax in axes[:, 0]:
-        ax.set_ylabel("Goodput (Mbps)")
+        if ax.get_visible():
+            ax.set_ylabel("Goodput (Mbps)")
     fig.suptitle("Main Connection Goodput")
     save_figure(fig, out_dir / "goodput.pdf", combined_pdf)
 

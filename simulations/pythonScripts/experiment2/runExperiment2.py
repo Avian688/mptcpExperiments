@@ -19,9 +19,8 @@ CONFIGS = [
     ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment2_mporb_semicoupled_alpha.ini"),
     ("MpOrbOlia", "mporb_olia", "experiment2_mporb_olia.ini"),
     ("MpOrbSemiCoupledBeta", "mporb_semicoupled_beta", "experiment2_mporb_semicoupled_beta.ini"),
-    ("MpOrbSemiCoupledDelta", "mporb_semicoupled_delta", "experiment2_mporb_semicoupled_delta.ini"),
     ("MpOrbSemiCoupledEpsilon", "mporb_semicoupled_epsilon", "experiment2_mporb_semicoupled_epsilon.ini"),
-    ("MpOrbSemiCoupledZeta", "mporb_semicoupled_zeta", "experiment2_mporb_semicoupled_zeta.ini"),
+    ("MpOrbSemiCoupledTheta", "mporb_semicoupled_theta", "experiment2_mporb_semicoupled_theta.ini"),
     ("LiaCoupled", "lia", "experiment2_lia.ini"),
     ("OliaCoupled", "olia", "experiment2_olia.ini"),
     ("BaliaCoupled", "balia", "experiment2_balia.ini"),
@@ -31,9 +30,8 @@ DEFAULT_CONFIGS = [
     "MpOrbSemiCoupledAlpha",
     "MpOrbOlia",
     "MpOrbSemiCoupledBeta",
-    "MpOrbSemiCoupledDelta",
     "MpOrbSemiCoupledEpsilon",
-    "MpOrbSemiCoupledZeta",
+    "MpOrbSemiCoupledTheta",
     "LiaCoupled",
     "OliaCoupled",
     "BaliaCoupled",
@@ -438,6 +436,15 @@ def main() -> int:
                 *[str(run) for run in range(1, args.runs + 1)],
             ]
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
+            if result.returncode != 0:
+                return result.returncode
+            summary_command = [
+                sys.executable,
+                str(SCRIPT_DIR / "summarizeExperiment2.py"),
+                "--runs",
+                *[str(run) for run in range(1, args.runs + 1)],
+            ]
+            result = subprocess.run(summary_command, cwd=str(SCRIPT_DIR))
             if result.returncode != 0:
                 return result.returncode
     except KeyboardInterrupt:

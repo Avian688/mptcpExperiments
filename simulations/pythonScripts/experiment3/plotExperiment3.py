@@ -33,9 +33,8 @@ PROTOCOLS = [
     ("mporb_alpha", "MPORB Alpha"),
     ("mporb_olia", "MPORB OLIA"),
     ("mporb_beta", "MPORB Beta"),
-    ("mporb_delta", "MPORB Delta"),
     ("mporb_epsilon", "MPORB Epsilon"),
-    ("mporb_zeta", "MPORB Zeta"),
+    ("mporb_theta", "MPORB Theta"),
 ]
 MSS_BYTES = 1448
 RTT_SECONDS = 0.05

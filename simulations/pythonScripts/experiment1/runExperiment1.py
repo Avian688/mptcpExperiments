@@ -439,6 +439,15 @@ def main() -> int:
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
             if result.returncode != 0:
                 return result.returncode
+            summary_command = [
+                sys.executable,
+                str(SCRIPT_DIR / "summarizeExperiment1.py"),
+                "--runs",
+                *[str(run) for run in range(1, args.runs + 1)],
+            ]
+            result = subprocess.run(summary_command, cwd=str(SCRIPT_DIR))
+            if result.returncode != 0:
+                return result.returncode
     except KeyboardInterrupt:
         print("\nCancelled; terminating active child processes.", file=sys.stderr)
         terminate_all_active_processes()
