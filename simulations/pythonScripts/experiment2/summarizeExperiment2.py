@@ -25,6 +25,7 @@ from summaryHelpers import (
 
 from plotExperiment2 import (
     MSS_BYTES,
+    PATH_CAPACITY_MBPS,
     PATH_QUEUE_MODULES,
     PROTOCOLS,
     TOTAL_PATH_CAPACITY_MBPS,
@@ -40,7 +41,7 @@ from plotExperiment2 import (
 
 
 IDEAL_USER_MBPS = TOTAL_PATH_CAPACITY_MBPS / len(USERS)
-PRIVATE_PATH_CAPACITY_MBPS = 100.0
+PRIVATE_PATH_CAPACITY_MBPS = PATH_CAPACITY_MBPS
 
 
 def parse_args() -> argparse.Namespace:
@@ -124,7 +125,9 @@ def protocol_report(label: str, rows: list[dict[str, object]], analysis_start: f
             "Test aggregate fairness when every connection has four edge-disjoint subflows but different path sharing.",
             "A uses paths 1-4 and every path is shared. B uses shared 1-2 plus private 5-6. C uses shared 3-4 plus private 7-8.",
             f"Ideal aggregate allocation: A = B = C = {IDEAL_USER_MBPS:.2f} Mbps, Jain fairness = 1, total = {TOTAL_PATH_CAPACITY_MBPS:.0f} Mbps.",
-            "Ideal symmetric subflow allocation: A gets 66.67 Mbps on each shared path; B/C get 33.33 Mbps on each shared path and 100 Mbps on each private path.",
+            f"Ideal symmetric subflow allocation: A gets {ideal_subflow_rate('A', 1):.2f} Mbps on each shared path; "
+            f"B/C get {ideal_subflow_rate('B', 1):.2f} Mbps on each shared path and "
+            f"{PRIVATE_PATH_CAPACITY_MBPS:.0f} Mbps on each private path.",
             "This fills every path while preventing B and C from taking an extra aggregate share merely because they have private capacity.",
         ]),
         "\n".join([

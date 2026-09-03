@@ -185,16 +185,16 @@ def write_protocol_general(w, protocol: str, settings: dict[str, str]) -> None:
     w(f'**.tcp.typename = "{settings["tcp_type"]}"')
     w(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     if protocol == "mporb":
-        w("# ORBCC needs IntQueue on the forward bottlenecks to append INT queue telemetry.")
+        w("# MPORB needs PintQueue on the forward bottlenecks to append PINT bottleneck telemetry.")
         w("# Keep these before the broad DropTail fallback: earlier matching lines have priority in these ini files.")
-        w('**.router1a.ppp[1].queue.typename = "IntQueue"')
-        w('**.router1b.ppp[1].queue.typename = "IntQueue"')
+        w('**.router1a.ppp[1].queue.typename = "PintQueue"')
+        w('**.router1b.ppp[1].queue.typename = "PintQueue"')
     w('**.ppp[*].queue.typename = "DropTailQueue"')
     w('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if protocol == "mporb":
         w("**.additiveIncreasePercent = 0.05")
         w("**.eta = 0.95")
-        w("**.alpha = 0.01")
+        w("**.alpha = 0.03")
         w("**.fixedAvgRTTVal = 0")
     w()
 

@@ -19,10 +19,10 @@ network sharedleopaths
             datarate = 10Gbps;
         }
 
-        channel bottleneck100Mbps extends DatarateChannel
+        channel bottleneckPath extends DatarateChannel
         {
             delay = 0ms;
-            datarate = 100Mbps;
+            datarate = 30Mbps;
         }
 
     submodules:
@@ -84,12 +84,12 @@ network sharedleopaths
         client[2].pppg++ <--> access40ms <--> router1[7].pppg++;
         router2[7].pppg++ <--> access40ms <--> server[2].pppg++;
 
-        router1[0].pppg++ <--> bottleneck100Mbps <--> router2[0].pppg++;
-        router1[1].pppg++ <--> bottleneck100Mbps <--> router2[1].pppg++;
-        router1[2].pppg++ <--> bottleneck100Mbps <--> router2[2].pppg++;
-        router1[3].pppg++ <--> bottleneck100Mbps <--> router2[3].pppg++;
-        router1[4].pppg++ <--> bottleneck100Mbps <--> router2[4].pppg++;
-        router1[5].pppg++ <--> bottleneck100Mbps <--> router2[5].pppg++;
-        router1[6].pppg++ <--> bottleneck100Mbps <--> router2[6].pppg++;
-        router1[7].pppg++ <--> bottleneck100Mbps <--> router2[7].pppg++;
+        router1[0].pppg++ <--> bottleneckPath <--> router2[0].pppg++;
+        router1[1].pppg++ <--> bottleneckPath <--> router2[1].pppg++;
+        router1[2].pppg++ <--> bottleneckPath <--> router2[2].pppg++;
+        router1[3].pppg++ <--> bottleneckPath <--> router2[3].pppg++;
+        router1[4].pppg++ <--> bottleneckPath <--> router2[4].pppg++;
+        router1[5].pppg++ <--> bottleneckPath <--> router2[5].pppg++;
+        router1[6].pppg++ <--> bottleneckPath <--> router2[6].pppg++;
+        router1[7].pppg++ <--> bottleneckPath <--> router2[7].pppg++;
 }

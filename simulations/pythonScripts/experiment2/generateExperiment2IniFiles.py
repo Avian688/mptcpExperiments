@@ -7,13 +7,19 @@ import random
 from pathlib import Path
 
 MSS_BYTES = 1448
-PATH_MBPS = 100
+PATH_MBPS = 30
 PATH_RTT_MS = 40
 RUNS = range(1, 6)
 START_RANDOM_WINDOW_S = 5.0
 START_RANDOM_SEED = 2999
 
 PROTOCOLS = {
+    "cubic": {
+        "config": "CubicUncoupled",
+        "tcp_type": "MpTcp",
+        "algorithm_class": "MpTcpMetaCubic",
+        "description": "Uncoupled MPTCP CUBIC",
+    },
     "mporb": {
         "config": "MpOrbUncoupled",
         "tcp_type": "MpOrb",
@@ -42,13 +48,13 @@ PROTOCOLS = {
         "config": "MpOrbSemiCoupledEpsilon",
         "tcp_type": "MpOrb",
         "algorithm_class": "MpOrbSemiCoupledEpsilon",
-        "description": "MPORB Epsilon full-path INT price allocation",
+        "description": "MPORB Epsilon PINT bottleneck-price allocation",
     },
     "mporb_semicoupled_theta": {
         "config": "MpOrbSemiCoupledTheta",
         "tcp_type": "MpOrb",
         "algorithm_class": "MpOrbSemiCoupledTheta",
-        "description": "MPORB Theta Alpha budget with INT headroom shifting",
+        "description": "MPORB Theta Alpha budget with PINT headroom shifting",
     },
     "lia": {
         "config": "LiaCoupled",
@@ -242,28 +248,18 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
     if is_mporb:
-        write("# ORBCC requires INT telemetry on every forward bottleneck.")
+        write("# MPORB requires PINT telemetry on every forward bottleneck.")
         write("# Keep these before the broad DropTail fallback: earlier matching lines have priority in these ini files.")
         for path in range(4):
-            write(f'**.router1[{path}].ppp[2].queue.typename = "IntQueue"')
+            write(f'**.router1[{path}].ppp[2].queue.typename = "PintQueue"')
         for path in range(4, 8):
-            write(f'**.router1[{path}].ppp[1].queue.typename = "IntQueue"')
+            write(f'**.router1[{path}].ppp[1].queue.typename = "PintQueue"')
     write('**.ppp[*].queue.typename = "DropTailQueue"')
     write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        if protocol in {
-            "mporb_semicoupled_alpha",
-            "mporb_olia",
-            "mporb_semicoupled_beta",
-            "mporb_semicoupled_epsilon",
-            "mporb_semicoupled_theta",
-        }:
-            write("# Zero selects OrbCC's time-normalized alpha = tau / averageRTT.")
-            write("**.alpha = 0")
-        else:
-            write("**.alpha = 0.01")
+        write("**.alpha = 0.03")
         write("**.fixedAvgRTTVal = 0")
     write()
 
@@ -285,7 +281,7 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
 
 def main() -> None:
     expected_packets = bdp_packets()
-    if expected_packets != 346:
+    if expected_packets != 104:
         raise RuntimeError(f"unexpected BDP packet count: {expected_packets}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)

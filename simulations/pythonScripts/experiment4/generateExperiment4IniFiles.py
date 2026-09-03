@@ -297,19 +297,15 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
     if is_mporb:
-        write("# Specific IntQueue assignments must precede the broad fallback.")
-        write('**.p1Ingress.ppp[0].queue.typename = "IntQueue"')
-        write('**.p2Ingress.ppp[0].queue.typename = "IntQueue"')
+        write("# Specific PintQueue assignments must precede the broad fallback.")
+        write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
+        write('**.p2Ingress.ppp[0].queue.typename = "PintQueue"')
     write('**.ppp[*].queue.typename = "DropTailQueue"')
     write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
-        if protocol in {"mporb_alpha", "mporb_olia", "mporb_beta", "mporb_epsilon", "mporb_theta"}:
-            write("# Zero selects OrbCC's time-normalized alpha = tau / averageRTT.")
-            write("**.alpha = 0")
-        else:
-            write("**.alpha = 0.01")
+        write("**.alpha = 0.03")
         write("**.fixedAvgRTTVal = 0")
     write()
 
