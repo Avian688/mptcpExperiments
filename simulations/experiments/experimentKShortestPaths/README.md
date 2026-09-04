@@ -14,12 +14,13 @@ Here, a shared link is a physical link in the routed satellite/ground-station
 core. The user-terminal access links at the two endpoints are excluded. This is
 a link-overlap constraint, not a count of shared nodes.
 
-The overlap-limited policies greedily retain the shortest Yen candidates that
-satisfy the pairwise limit. The strict edge-disjoint policy uses the exact
+The overlap-limited policies greedily retain qualifying paths from the first
+256 Yen candidates. They return up to ten paths rather than searching without
+limit until ten are found. The strict edge-disjoint policy uses the exact
 minimum-cost maximum-flow solver. Results therefore compare the implemented
 selection policies, rather than two identical optimizers with one flag changed.
 
-Each policy requests ten paths. One `KShortestPathPingApp` instance is
+Each policy allows up to ten paths. One `KShortestPathPingApp` instance is
 assigned to every pair and path rank, so one policy run measures all 50
 pair/rank combinations at one ping every 50 ms per path. The ICMP request and
 reply use the same path selector in
@@ -29,10 +30,13 @@ it is then counted as a failed ping instead of falling back to the ordinary
 shortest route. Pings stop two seconds before the simulation limit so late
 replies are not misclassified by shutdown.
 
-Ten paths is a request, not an assumption. The strict solver returns only the
-feasible edge-disjoint paths (often fewer than ten because endpoint-adjacent
-core degree is a hard bound), and unavailable ranks remain visible in the
-availability and ping-success results.
+Ten paths is a maximum, not a required result. The overlap-limited heuristic
+returns every qualifying path found within its 256-candidate budget, capped at
+ten. A missing rank therefore means it was not found within that bounded
+search, not that global infeasibility was proven. The strict solver returns only
+the feasible edge-disjoint paths, often fewer than ten because
+endpoint-adjacent core degree is a hard bound. Unavailable ranks remain visible
+in the availability and ping-success results.
 
 ## Save Routing Files
 
