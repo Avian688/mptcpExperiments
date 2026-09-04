@@ -65,6 +65,12 @@ def parse_args():
     )
     parser.add_argument("--sim-time", type=float, default=300)
     parser.add_argument(
+        "--no-isls",
+        dest="show_isls",
+        action="store_false",
+        help="Hide the inter-satellite-link background layer",
+    )
+    parser.add_argument(
         "--skip-generate",
         action="store_true",
         help="Reuse the existing visualization INI",
@@ -97,6 +103,7 @@ def main() -> int:
         common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
         f"--*.pathVisualizer.pairIndex={pair_index}",
+        f"--*.pathVisualizer.showInterSatelliteLinks={'true' if args.show_isls else 'false'}",
         "-l",
         str(REPO_ROOT / "lib" / "oppqtenv-osg"),
     ]

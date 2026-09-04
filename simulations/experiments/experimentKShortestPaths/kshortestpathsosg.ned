@@ -72,6 +72,7 @@ network kshortestpathsosg
                 numGroundStations = parent.numOfGS;
                 numClients = parent.numOfClients;
                 numUserTerminals = parent.numOfUserTerminals;
+                satellitesPerPlane = parent.satsPerPlane;
                 @display("p=700,100");
         }
     connections allowunconnected:

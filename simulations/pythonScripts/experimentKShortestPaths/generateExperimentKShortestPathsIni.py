@@ -126,6 +126,7 @@ def generate_visualization_ini(extra_ground_stations, sim_time_seconds):
         write_line(f, "*.pathVisualizer.pairIndex = 0")
         write_line(f, "*.pathVisualizer.updateInterval = 1s")
         write_line(f, "*.pathVisualizer.animationSpeed = 1")
+        write_line(f, "*.pathVisualizer.showInterSatelliteLinks = true")
         write_line(f)
 
         for ground_station_index, (city, coordinates) in enumerate(city_ground_stations):
