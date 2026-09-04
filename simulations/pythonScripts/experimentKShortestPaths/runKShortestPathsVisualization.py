@@ -7,6 +7,7 @@ import subprocess
 
 from experimentKShortestPathsSupport import (
     EXPERIMENT_DIR,
+    REPO_ROOT,
     SAMPLES_ROOT,
     common_ned_path,
     load_libraries,
@@ -96,6 +97,8 @@ def main() -> int:
         common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
         f"--*.pathVisualizer.pairIndex={pair_index}",
+        "-l",
+        str(REPO_ROOT / "lib" / "oppqtenv-osg"),
     ]
     for library in load_libraries():
         command.extend(["-l", str(library)])
