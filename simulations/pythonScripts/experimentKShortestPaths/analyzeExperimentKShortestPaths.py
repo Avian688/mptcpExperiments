@@ -300,8 +300,10 @@ def make_figure(rows, policies, pair_key=None, title=None):
         availability = matrix_for(rows, policies, pair_key, "catalog_availability_pct")
 
     finite_rtts = average_rtt[np.isfinite(average_rtt)]
+    finite_rank_one_rtts = average_rtt[0, np.isfinite(average_rtt[0])]
     finite_penalties = penalty[np.isfinite(penalty)]
-    rtt_maximum = max(10, float(np.max(finite_rtts))) if finite_rtts.size else 10
+    rtt_minimum = float(np.min(finite_rank_one_rtts)) if finite_rank_one_rtts.size else 0
+    rtt_maximum = max(rtt_minimum + 1, float(np.max(finite_rtts))) if finite_rtts.size else rtt_minimum + 1
     penalty_maximum = max(10, float(np.max(finite_penalties))) if finite_penalties.size else 10
     figure, axes = plt.subplots(1, 3, figsize=(18, 6), constrained_layout=True)
     heatmap(
@@ -310,7 +312,7 @@ def make_figure(rows, policies, pair_key=None, title=None):
         policies,
         "Average RTT",
         "RdYlGn_r",
-        0,
+        rtt_minimum,
         rtt_maximum,
         " ms",
     )
