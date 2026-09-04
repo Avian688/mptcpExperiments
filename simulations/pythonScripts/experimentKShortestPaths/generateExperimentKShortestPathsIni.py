@@ -12,6 +12,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 SIMULATIONS_DIR = SCRIPT_DIR.parents[1]
 EXPERIMENT_DIR = SIMULATIONS_DIR / "experiments" / "experimentKShortestPaths"
 INI_FILE = EXPERIMENT_DIR / "experimentKShortestPaths.ini"
+VISUALIZATION_INI_FILE = EXPERIMENT_DIR / "visualizeKShortestPaths.ini"
 GROUND_STATIONS_FILE = SCRIPT_DIR / "ground_stations.txt"
 
 PATH_COUNT = 10
@@ -21,6 +22,7 @@ PING_DRAIN_SECONDS = 2.0
 MAX_RTT_SPREAD_MS = 1000
 K_PATH_SNAPSHOT_SET = "ExperimentKShortestPaths"
 ROUTE_STORE = "leoSaves"
+OSG_EARTH_TEXTURE = "../../../../osg-satellites/earth.jpg"
 
 CITY_COORDINATES = {
     "San Diego": (32.7157, -117.1611),
@@ -76,6 +78,93 @@ def endpoint_pair_specification():
 def write_policy_parameters(handle, policy):
     write_line(handle, f"*.configurator.kPathsEdgeDisjoint = {'true' if policy['edge_disjoint'] else 'false'}")
     write_line(handle, f"*.configurator.kPathMaxSharedLinks = {policy['max_shared']}")
+
+
+def quote_ini_string(value):
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def generate_visualization_ini(extra_ground_stations, sim_time_seconds):
+    if sim_time_seconds <= 0:
+        raise ValueError("Visualization simulation time must be positive")
+    city_ground_stations = list(CITY_COORDINATES.items())
+    num_ground_stations = len(city_ground_stations) + len(extra_ground_stations)
+    terminal_count = 2 * len(PAIR_DEFINITIONS)
+    routing_directory = f"{ROUTE_STORE}/1584_550_72_22_53_{num_ground_stations}_ISL"
+    terminal_pairs = ",".join(
+        f"{source_index}-{destination_index}"
+        for _, _, _, source_index, destination_index in PAIR_DEFINITIONS
+    )
+
+    with VISUALIZATION_INI_FILE.open("w", encoding="utf-8") as f:
+        write_line(f, "[General]")
+        write_line(f, "network = kshortestpathsosg")
+        write_line(f, f"sim-time-limit = {sim_time_seconds:g}s")
+        write_line(f, "record-eventlog = false")
+        write_line(f, "**.scalar-recording = false")
+        write_line(f, "**.vector-recording = false")
+        write_line(f, "**.bin-recording = false")
+        write_line(f, "qtenv-default-config = View_Unrestricted")
+        write_line(f)
+
+        write_line(f, "*.numOfSats = 1584")
+        write_line(f, f"*.numOfGS = {num_ground_stations}")
+        write_line(f, "*.numOfClients = 0")
+        write_line(f, f"*.numOfUserTerminals = {terminal_count}")
+        write_line(f, "*.satsPerPlane = 22")
+        write_line(f, "*.numOfPlanes = 72")
+        write_line(f, "*.incl = 53")
+        write_line(f, "*.alt = 550")
+        write_line(f)
+
+        write_line(f, f'*.pathVisualizer.earthTexture = "{OSG_EARTH_TEXTURE}"')
+        write_line(f, f'*.pathVisualizer.routingDirectory = "{routing_directory}"')
+        write_line(f, f'*.pathVisualizer.snapshotSet = "{K_PATH_SNAPSHOT_SET}"')
+        write_line(f, f'*.pathVisualizer.endpointPairs = "{terminal_pairs}"')
+        write_line(f, f"*.pathVisualizer.pathCount = {PATH_COUNT}")
+        write_line(f, f"*.pathVisualizer.maxRttSpread = {MAX_RTT_SPREAD_MS}ms")
+        write_line(f, "*.pathVisualizer.pairIndex = 0")
+        write_line(f, "*.pathVisualizer.updateInterval = 1s")
+        write_line(f, "*.pathVisualizer.animationSpeed = 1")
+        write_line(f)
+
+        for ground_station_index, (city, coordinates) in enumerate(city_ground_stations):
+            latitude, longitude = coordinates
+            write_line(f, f'*.groundStation[{ground_station_index}].label = "{quote_ini_string(city)}"')
+            write_line(f, f"*.groundStation[{ground_station_index}].latitude = {latitude}")
+            write_line(f, f"*.groundStation[{ground_station_index}].longitude = {longitude}")
+
+        ground_station_offset = len(city_ground_stations)
+        for offset, entry in enumerate(extra_ground_stations):
+            ground_station_index = ground_station_offset + offset
+            label = quote_ini_string(entry["Location Comment"])
+            write_line(f, f'*.groundStation[{ground_station_index}].label = "{label}"')
+            write_line(f, f"*.groundStation[{ground_station_index}].latitude = {entry['Latitude']}")
+            write_line(f, f"*.groundStation[{ground_station_index}].longitude = {entry['Longitude']}")
+        write_line(f)
+
+        for pair_key, source_city, destination_city, source_index, destination_index in PAIR_DEFINITIONS:
+            source_latitude, source_longitude = CITY_COORDINATES[source_city]
+            destination_latitude, destination_longitude = CITY_COORDINATES[destination_city]
+            write_line(f, f"# {pair_key}")
+            write_line(f, f'*.userTerminal[{source_index}].label = "{quote_ini_string(source_city)}"')
+            write_line(f, f"*.userTerminal[{source_index}].latitude = {source_latitude}")
+            write_line(f, f"*.userTerminal[{source_index}].longitude = {source_longitude}")
+            write_line(f, f'*.userTerminal[{destination_index}].label = "{quote_ini_string(destination_city)}"')
+            write_line(f, f"*.userTerminal[{destination_index}].latitude = {destination_latitude}")
+            write_line(f, f"*.userTerminal[{destination_index}].longitude = {destination_longitude}")
+        write_line(f)
+
+        for policy_name, policy in POLICIES.items():
+            write_line(f, f"[Config View_{policy_name}]")
+            write_line(f, "extends = General")
+            write_line(f, f'*.pathVisualizer.policyLabel = "{quote_ini_string(policy["label"])}"')
+            write_line(f, f"*.pathVisualizer.edgeDisjoint = {'true' if policy['edge_disjoint'] else 'false'}")
+            write_line(f, f"*.pathVisualizer.maxSharedLinks = {policy['max_shared']}")
+            write_line(f, f'description = "3D view of {quote_ini_string(policy["label"])} paths"')
+            write_line(f)
+
+    print(f"Generated {VISUALIZATION_INI_FILE}")
 
 
 def generate_ini(sim_time_seconds=300):
@@ -250,6 +339,7 @@ def generate_ini(sim_time_seconds=300):
             write_line(f, f'description = "Probe {policy["label"]} paths 1-{PATH_COUNT}"')
             write_line(f)
 
+    generate_visualization_ini(extra_ground_stations, sim_time_seconds)
     print(f"Generated {INI_FILE}")
     return INI_FILE
 

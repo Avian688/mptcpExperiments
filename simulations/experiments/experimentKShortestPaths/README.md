@@ -79,6 +79,42 @@ changed consistently with `--sim-time` when generating a fresh INI/corpus.
 Main outputs are `csvs/summary.csv`, the per-sample CSV files, and
 `simulations/plots/experimentKShortestPaths/experimentKShortestPaths.pdf`.
 
+## 3D Path Viewer
+
+The companion viewer displays the Earth, the 1,584-satellite constellation,
+all ground stations and user terminals, and the ranked paths from the saved
+catalogs. It is display-only: it does not construct interfaces, queues, routing
+tables, channels, or ping applications. One timer reads the current saved
+snapshot and refreshes the batched geometry once per simulated second.
+
+From `simulations/pythonScripts/experimentKShortestPaths`, open a policy and
+endpoint pair with:
+
+```sh
+python3 runKShortestPathsVisualization.py --policy Shared1 --pair SanDiegoToShanghai
+```
+
+The pair can also be selected by number from 1 to 5. Valid policies are
+`Unrestricted`, `Shared1` through `Shared5`, and `EdgeDisjoint`. For example:
+
+```sh
+python3 runKShortestPathsVisualization.py --policy EdgeDisjoint --pair 4
+```
+
+The launcher regenerates the visualization INI by default; pass
+`--skip-generate` to retain the existing file. It opens Qtenv using
+`visualizeKShortestPaths.ini`. The source endpoint is shown in green, the
+destination in red, and the HUD maps each route color to its rank, RTT, and
+link count. Unavailable ranks remain listed rather than being silently replaced
+by another route. Satellites are pale grey, ground stations are cyan, and user
+terminals are amber; only links belonging to the selected ten paths are drawn,
+so the full constellation does not become an unreadable mesh.
+
+The viewer reuses `osg-satellites/earth.jpg` on a lightweight OSG globe and
+requires OMNeT++ to be built with `WITH_OSG=yes`; osgEarth is not required.
+Generate the selected policy's route catalog before opening it. The visualizer
+reports the exact expected profile directory if that catalog is absent.
+
 ## Non-Edge-Disjoint Default
 
 The configurator itself defaults to `kPathMaxSharedLinks = -1`, meaning ordinary
