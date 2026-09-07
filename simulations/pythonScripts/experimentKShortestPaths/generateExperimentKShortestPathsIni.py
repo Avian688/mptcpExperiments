@@ -165,6 +165,13 @@ def generate_visualization_ini(extra_ground_stations, sim_time_seconds):
             write_line(f, f'description = "3D view of {quote_ini_string(policy["label"])} paths"')
             write_line(f)
 
+        write_line(f, "[Config View_ShortestPath]")
+        write_line(f, "extends = View_Unrestricted")
+        write_line(f, '*.pathVisualizer.policyLabel = "Shortest path"')
+        write_line(f, "*.pathVisualizer.shortestPathOnly = true")
+        write_line(f, 'description = "3D view of only the lowest-delay unrestricted path"')
+        write_line(f)
+
     print(f"Generated {VISUALIZATION_INI_FILE}")
 
 

@@ -44,11 +44,12 @@ def resolve_pair(value: str) -> tuple[int, str]:
 
 def resolve_policy(value: str) -> str:
     normalized = value.lower().replace("-", "").replace("_", "").replace(" ", "")
-    for policy in POLICIES:
+    visualization_policies = ("ShortestPath", *POLICIES)
+    for policy in visualization_policies:
         if normalized == policy.lower():
             return policy
     raise argparse.ArgumentTypeError(
-        f"unknown policy '{value}'; choose {', '.join(POLICIES)}"
+        f"unknown policy '{value}'; choose {', '.join(visualization_policies)}"
     )
 
 
@@ -56,7 +57,10 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Open the display-only 3D K-shortest-path viewer in Qtenv"
     )
-    parser.add_argument("--policy", type=resolve_policy, default="Unrestricted")
+    parser.add_argument(
+        "--policy", type=resolve_policy, default="Unrestricted",
+        help="ShortestPath for only the lowest-delay route, or Unrestricted, Shared1-Shared5, EdgeDisjoint",
+    )
     parser.add_argument(
         "--pair",
         type=resolve_pair,

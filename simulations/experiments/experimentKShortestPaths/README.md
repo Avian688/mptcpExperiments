@@ -94,8 +94,20 @@ endpoint pair with:
 python3 runKShortestPathsVisualization.py --policy Shared1 --pair SanDiegoToShanghai
 ```
 
-The pair can also be selected by number from 1 to 5. Valid policies are
-`Unrestricted`, `Shared1` through `Shared5`, and `EdgeDisjoint`. For example:
+To display just the shortest path, use:
+
+```sh
+python3 runKShortestPathsVisualization.py --policy ShortestPath --pair SanDiegoToShanghai
+```
+
+`ShortestPath` draws only rank 1 (the lowest-delay route) from the existing
+`Unrestricted` catalog, with one legend entry. It follows the saved route at
+each snapshot and does not require a separate one-path catalog. In Qtenv, select
+`View_ShortestPath` for the same view. ISLs remain visible by default; add
+`--no-isls` to hide the background links.
+
+The pair can also be selected by number from 1 to 5. Valid viewer policies are
+`ShortestPath`, `Unrestricted`, `Shared1` through `Shared5`, and `EdgeDisjoint`. For example:
 
 ```sh
 python3 runKShortestPathsVisualization.py --policy EdgeDisjoint --pair 4
