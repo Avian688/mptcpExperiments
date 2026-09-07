@@ -106,11 +106,13 @@ The launcher regenerates the visualization INI by default; pass
 `visualizeKShortestPaths.ini`. The source endpoint is shown in green, the
 destination in red, and the HUD maps each route color to its rank, RTT, and
 link count. Unavailable ranks remain listed rather than being silently replaced
-by another route. Satellites are pale grey, ground stations are cyan, and user
-terminals are amber. The complete ISL topology is shown as a subdued background
-layer by default; no background ground-station or user-terminal access links are
-drawn. Pass `--no-isls` to hide the ISL layer. The selected ranked paths remain
-drawn in their rank colors above it.
+by another route. Satellites are bright pale blue-white markers, 6 pixels across
+by default (adjust `*.pathVisualizer.satellitePointSize` in the visualization
+INI). Ground stations are cyan, and user terminals are amber. The complete ISL
+topology is shown by default as opaque light-blue lines, 2 pixels wide; no
+background ground-station or user-terminal access links are drawn. Pass
+`--no-isls` to hide the ISL layer. The selected ranked paths remain drawn in
+their rank colors above it.
 
 The viewer reuses `osg-satellites/earth.jpg` on a lightweight OSG globe and
 requires OMNeT++ to be built with `WITH_OSG=yes`; osgEarth is not required.
