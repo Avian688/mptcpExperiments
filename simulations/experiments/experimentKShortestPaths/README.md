@@ -7,8 +7,9 @@ compares these path-selection policies:
 - at most 1, 2, 3, 4, or 5 shared undirected core links between any two paths;
 - strictly edge-disjoint core paths.
 
-The Experiment 9 bent-pipe modes are intentionally excluded because they do not
-offer a multi-hop ISL core over which edge overlap can be varied.
+The ping comparison uses the ISL topology. The route saver and 3D viewer also
+support `GroundRelay`: ISLs are disabled and core routes relay through
+satellite-ground-station links.
 
 Here, a shared link is a physical link in the routed satellite/ground-station
 core. The user-terminal access links at the two endpoints are excluded. This is
@@ -55,6 +56,20 @@ The saver generates all seven K-path policies by default: unrestricted,
 Shared1 through Shared5, and strict edge-disjoint. Use `--policies` to generate
 only a subset. Step 1 is the primary shortest-route corpus and step 2 is the
 K-path corpus, so `--start-step 2` reuses existing primary files.
+
+For ground-relayed routes, select the topology when saving:
+
+```sh
+python3 runExperimentKShortestPathsSaveFiles.py --topology GroundRelay --policies Unrestricted
+```
+
+This saves primary routes and the unrestricted K-path catalog with
+`enableInterSatelliteLinks = false`. Ground-relayed files use the constellation
+directory ending in `_BP`; the ISL files use `_ISL`. Both stores coexist under
+this experiment's `leoSaves/`. Omit `--policies Unrestricted` to save all seven
+policies for ground relaying. Use `--topology GroundRelay --start-step 2` only
+after generating the ground-relayed primary files for the required duration.
+The saver defaults to `--topology ISL`.
 
 After saving the routes, run the ping and analysis stages:
 
@@ -106,6 +121,22 @@ each snapshot and does not require a separate one-path catalog. In Qtenv, select
 `View_ShortestPath` for the same view. ISLs remain visible by default; add
 `--no-isls` to hide the background links.
 
+To view the saved ground-relayed shortest route, use:
+
+```sh
+python3 runKShortestPathsVisualization.py --topology GroundRelay --policy ShortestPath --pair SanDiegoToShanghai
+```
+
+This loads the `_BP` unrestricted catalog and draws the route through its
+satellites and ground stations. ISL background lines are disabled automatically.
+If no route exists in a snapshot, the legend shows it as unavailable. The other
+policies also accept `--topology GroundRelay` once their `_BP` catalogs have
+been saved. Qtenv exposes the corresponding `View_<policy>_GroundRelay`
+configurations, including `View_ShortestPath_GroundRelay`.
+
+Use `--topology ISL` (the default) to return to ISL routing. `--no-isls` only
+hides the background lines; it does not select a different routing topology.
+
 The pair can also be selected by number from 1 to 5. Valid viewer policies are
 `ShortestPath`, `Unrestricted`, `Shared1` through `Shared5`, and `EdgeDisjoint`. For example:
 
@@ -120,7 +151,7 @@ destination in red, and the HUD maps each route color to its rank, RTT, and
 link count. Unavailable ranks remain listed rather than being silently replaced
 by another route. Satellites are bright pale blue-white markers, 6 pixels across
 by default (adjust `*.pathVisualizer.satellitePointSize` in the visualization
-INI). Ground stations are cyan, and user terminals are amber. The complete ISL
+INI). Ground stations are cyan, and user terminals are amber. In ISL mode, the complete ISL
 topology is shown by default as opaque light-blue lines, 2 pixels wide; no
 background ground-station or user-terminal access links are drawn. Pass
 `--no-isls` to hide the ISL layer. The selected ranked paths remain drawn in

@@ -23,6 +23,7 @@ MAX_RTT_SPREAD_MS = 1000
 K_PATH_SNAPSHOT_SET = "ExperimentKShortestPaths"
 ROUTE_STORE = "leoSaves"
 OSG_EARTH_TEXTURE = "../../../../osg-satellites/earth.jpg"
+TOPOLOGIES = ("ISL", "GroundRelay")
 
 CITY_COORDINATES = {
     "San Diego": (32.7157, -117.1611),
@@ -61,6 +62,12 @@ def write_line(handle, line=""):
     handle.write(line + "\n")
 
 
+def topology_config_name(base_name, topology):
+    if topology not in TOPOLOGIES:
+        raise ValueError(f"Unknown topology: {topology}")
+    return base_name if topology == "ISL" else f"{base_name}_GroundRelay"
+
+
 def load_ground_stations():
     if not GROUND_STATIONS_FILE.is_file():
         raise FileNotFoundError(f"Missing experiment ground-station list: {GROUND_STATIONS_FILE}")
@@ -90,7 +97,8 @@ def generate_visualization_ini(extra_ground_stations, sim_time_seconds):
     city_ground_stations = list(CITY_COORDINATES.items())
     num_ground_stations = len(city_ground_stations) + len(extra_ground_stations)
     terminal_count = 2 * len(PAIR_DEFINITIONS)
-    routing_directory = f"{ROUTE_STORE}/1584_550_72_22_53_{num_ground_stations}_ISL"
+    routing_directory_prefix = f"{ROUTE_STORE}/1584_550_72_22_53_{num_ground_stations}"
+    routing_directory = f"{routing_directory_prefix}_ISL"
     terminal_pairs = ",".join(
         f"{source_index}-{destination_index}"
         for _, _, _, source_index, destination_index in PAIR_DEFINITIONS
@@ -171,6 +179,19 @@ def generate_visualization_ini(extra_ground_stations, sim_time_seconds):
         write_line(f, "*.pathVisualizer.shortestPathOnly = true")
         write_line(f, 'description = "3D view of only the lowest-delay unrestricted path"')
         write_line(f)
+
+        # Reuse each policy's display settings, but load the independently saved
+        # bent-pipe topology. Hiding the ISL overlay alone does not change routes.
+        for policy_name in ("ShortestPath", *POLICIES):
+            base_config = f"View_{policy_name}"
+            label = "Shortest path" if policy_name == "ShortestPath" else POLICIES[policy_name]["label"]
+            write_line(f, f"[Config {topology_config_name(base_config, 'GroundRelay')}]")
+            write_line(f, f"extends = {base_config}")
+            write_line(f, f'*.pathVisualizer.routingDirectory = "{routing_directory_prefix}_BP"')
+            write_line(f, "*.pathVisualizer.showInterSatelliteLinks = false")
+            write_line(f, f'*.pathVisualizer.policyLabel = "Ground relay | {quote_ini_string(label)}"')
+            write_line(f, f'description = "Ground-relayed 3D view: {quote_ini_string(label)} (ISLs disabled)"')
+            write_line(f)
 
     print(f"Generated {VISUALIZATION_INI_FILE}")
 
@@ -345,6 +366,15 @@ def generate_ini(sim_time_seconds=300):
                 write_line(f, f"*.userTerminal[{source_index}].numApps = {PATH_COUNT}")
             write_policy_parameters(f, policy)
             write_line(f, f'description = "Probe {policy["label"]} paths 1-{PATH_COUNT}"')
+            write_line(f)
+
+        # Keep the existing ISL configurations and corpora intact. The routing
+        # configurator selects its separate _BP store when ISLs are disabled.
+        for base_config in ("GenerateShortestPaths", *(f"Generate_{policy}" for policy in POLICIES)):
+            write_line(f, f"[Config {topology_config_name(base_config, 'GroundRelay')}]")
+            write_line(f, f"extends = {base_config}")
+            write_line(f, "**.enableInterSatelliteLinks = false")
+            write_line(f, f'description = "Ground-relayed routing: {base_config} (ISLs disabled)"')
             write_line(f)
 
     generate_visualization_ini(extra_ground_stations, sim_time_seconds)

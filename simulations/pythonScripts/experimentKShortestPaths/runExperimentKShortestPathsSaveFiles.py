@@ -13,7 +13,9 @@ from experimentKShortestPathsSupport import (
     run_simulation_configs,
     terminate_all_active_processes,
 )
-from generateExperimentKShortestPathsIni import EXPERIMENT_DIR, POLICIES, generate_ini
+from generateExperimentKShortestPathsIni import (
+    EXPERIMENT_DIR, POLICIES, TOPOLOGIES, generate_ini, topology_config_name,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,6 +25,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--start-step", type=int, choices=(1, 2), default=1)
     parser.add_argument("--end-step", type=int, choices=(1, 2), default=2)
     parser.add_argument("--sim-time", type=float, default=300, help="Saved routing duration in seconds")
+    parser.add_argument(
+        "--topology", choices=TOPOLOGIES, default="ISL",
+        help="ISL links enabled, or GroundRelay through ground stations with ISLs disabled",
+    )
     parser.add_argument("--policies", nargs="+", choices=list(POLICIES), default=list(POLICIES))
     parser.add_argument(
         "--cores",
@@ -51,13 +57,14 @@ def main() -> int:
         raise ValueError("--start-step must not exceed --end-step")
 
     generate_ini(args.sim_time)
-    print(f"Route store: {EXPERIMENT_DIR / 'leoSaves'}")
+    topology_tag = "ISL" if args.topology == "ISL" else "BP"
+    print(f"Route store: {EXPERIMENT_DIR / 'leoSaves'} (topology {args.topology}, _{topology_tag} directory)")
 
     if args.start_step <= 1 <= args.end_step:
         print("Step 1/2: generating primary shortest-path routes")
         run_simulation_configs(
-            [SimulationConfig("GenerateShortestPaths", require_vector=False)],
-            "primary-routes",
+            [SimulationConfig(topology_config_name("GenerateShortestPaths", args.topology), require_vector=False)],
+            topology_config_name("primary-routes", args.topology),
             1,
             args.retries,
             args.sim_timeout_seconds,
@@ -66,12 +73,12 @@ def main() -> int:
     if args.start_step <= 2 <= args.end_step:
         print("Step 2/2: generating K-shortest-path policy catalogs")
         configs = [
-            SimulationConfig(f"Generate_{policy}", require_vector=False)
+            SimulationConfig(topology_config_name(f"Generate_{policy}", args.topology), require_vector=False)
             for policy in args.policies
         ]
         run_simulation_configs(
             configs,
-            "k-path-routes",
+            topology_config_name("k-path-routes", args.topology),
             args.cores,
             args.retries,
             args.sim_timeout_seconds,

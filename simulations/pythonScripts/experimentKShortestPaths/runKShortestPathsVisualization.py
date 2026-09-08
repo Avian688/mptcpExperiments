@@ -16,9 +16,11 @@ from experimentKShortestPathsSupport import (
 from generateExperimentKShortestPathsIni import (
     PAIR_DEFINITIONS,
     POLICIES,
+    TOPOLOGIES,
     VISUALIZATION_INI_FILE,
     generate_visualization_ini,
     load_ground_stations,
+    topology_config_name,
 )
 
 
@@ -69,10 +71,14 @@ def parse_args():
     )
     parser.add_argument("--sim-time", type=float, default=300)
     parser.add_argument(
+        "--topology", choices=TOPOLOGIES, default="ISL",
+        help="Load ISL routes or saved GroundRelay routes with ISLs disabled",
+    )
+    parser.add_argument(
         "--no-isls",
         dest="show_isls",
         action="store_false",
-        help="Hide the inter-satellite-link background layer",
+        help="Hide the ISL background layer only; use --topology GroundRelay to change routing",
     )
     parser.add_argument(
         "--skip-generate",
@@ -102,19 +108,19 @@ def main() -> int:
         "-f",
         VISUALIZATION_INI_FILE.name,
         "-c",
-        f"View_{args.policy}",
+        topology_config_name(f"View_{args.policy}", args.topology),
         "-n",
         common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
         f"--*.pathVisualizer.pairIndex={pair_index}",
-        f"--*.pathVisualizer.showInterSatelliteLinks={'true' if args.show_isls else 'false'}",
+        f"--*.pathVisualizer.showInterSatelliteLinks={'true' if args.show_isls and args.topology == 'ISL' else 'false'}",
         "-l",
         str(REPO_ROOT / "lib" / "oppqtenv-osg"),
     ]
     for library in load_libraries():
         command.extend(["-l", str(library)])
 
-    print(f"Opening {args.policy}, pair {pair_index + 1}: {pair_name}")
+    print(f"Opening {args.topology}, {args.policy}, pair {pair_index + 1}: {pair_name}")
     print("$ " + " ".join(command))
     return subprocess.call(command, cwd=EXPERIMENT_DIR)
 
