@@ -48,6 +48,20 @@ subflow establishment is not automatically restarted by this experiment.
 Catalog changes can also invalidate an in-flight packet's rank at an intermediate
 hop, as in the original ping experiment; this is not packet-level source routing.
 
+A lost core route can affect individual ranks; a detached source or destination
+access link affects every rank. Neither event directly informs Alpha or the
+packet scheduler: transport loss detection, retransmission and MPTCP reinjection
+drive recovery. Established subflows can reuse their rank when it returns;
+closed subflows are not automatically recreated by the experiment.
+
+The current handover implementation uses 1.5 × (old access RTT + new access RTT),
+with 50 ms as the fallback, rather than a fixed 50 ms in every case. Reconnection
+invalidates the loaded catalog, which is reloaded at the next 100 ms routing
+update; forwarding and transport recovery can therefore take longer than the
+physical detach interval. An endpoint attachment change currently clears the
+whole catalog, including other pairs, until that reload. The availability plots
+do not distinguish these causes and are not exact handover-duration measurements.
+
 Monitor-only `KShortestPathPingApp` instances read each selected rank's availability,
 expected propagation RTT and catalog size every 100 ms, just after routing updates.
 They send no probe packets. Catalog availability does not prove successful
@@ -101,6 +115,9 @@ python3 ../experimentKShortestPaths/runExperimentKShortestPathsSaveFiles.py --po
 # Run, export CSV-R, extract, then plot. Default concurrency is two.
 python3 runExperimentMpOrbKShortestPaths.py --cores 2
 
+# Preserve completed runs after the teardown-only fix; run failed/missing sims.
+python3 runExperimentMpOrbKShortestPaths.py --sim-time 300 --cores 10 --keep-completed --retries 0
+
 # Small first batch: five pairs × five treatments × one seed = 25 runs.
 python3 runExperimentMpOrbKShortestPaths.py --runs 1 --cores 2
 
@@ -119,6 +136,14 @@ Steps are 1=simulate, 2=export, 3=extract, 4=plot; use `--start-step` and
 configuration names. Running again resumes successful runs. `--rerun` explicitly
 repeats selected completed runs. `EXPERIMENT_CORES`, `OPP_RUN`, and `OPP_SCAVETOOL`
 can override concurrency and executables.
+
+By default, changed inputs or rebuilt libraries invalidate successful runs.
+`--keep-completed` explicitly ignores that fingerprint difference, while still
+requiring a matching configuration and unchanged scalar/vector output files.
+It preserves the original completion marker and provenance. Use it when retaining
+earlier results is appropriate (such as a teardown-only fix), since it can combine
+results from different builds or route inputs. It cannot be combined with
+`--rerun`. Runs that aborted at teardown still count as failed and will rerun.
 
 The runner checks every expected snapshot timestamp before launching. The C++
 loader then validates profile, endpoint, and route-state consistency. Successful

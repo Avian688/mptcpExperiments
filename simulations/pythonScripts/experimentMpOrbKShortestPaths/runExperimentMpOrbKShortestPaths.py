@@ -152,9 +152,11 @@ def run_logged_command(command, log_path, timeout):
                 ACTIVE.discard(process)
 
 
-def run_config(config, fingerprint, resume, retries, timeout):
+def run_config(config, fingerprint, resume, retries, timeout, keep_completed=False):
     completed = read_completion(config)
-    if resume and completed and completed.get("fingerprint") == fingerprint:
+    if resume and completed and (keep_completed or completed.get("fingerprint") == fingerprint):
+        if completed.get("fingerprint") != fingerprint:
+            print(f'{config["config"]}: keeping completed results from previous inputs/build', flush=True)
         return True
     for attempt in range(retries + 1):
         if STOP.is_set():
@@ -199,7 +201,7 @@ def run_simulations(configs, args):
     executor = ThreadPoolExecutor(max_workers=args.cores)
     try:
         futures = {executor.submit(run_config, c, fingerprint, not args.rerun,
-                                   args.retries, args.sim_timeout_seconds): c for c in configs}
+                                   args.retries, args.sim_timeout_seconds, args.keep_completed): c for c in configs}
         for index, future in enumerate(as_completed(futures), 1):
             config = futures[future]
             ok = future.result()
@@ -243,9 +245,13 @@ def parse_args():
     parser.add_argument("--configs", nargs="+", help="Exact configuration names to run or process")
     parser.add_argument("--runs", nargs="+", type=int, choices=range(1, 6), help="Restrict run numbers (default all five)")
     parser.add_argument("--rerun", action="store_true", help="Rerun selected successful configurations")
+    parser.add_argument("--keep-completed", action="store_true",
+                        help="Skip valid completed configurations even if inputs/libraries changed; retain their original provenance")
     parser.add_argument("--dry-run", action="store_true", help="Generate/list selected configs without simulations or exports")
     parser.add_argument("--check-routes", action="store_true", help="Check saved coverage and exit; never simulates")
     args = parser.parse_args()
+    if args.rerun and args.keep_completed:
+        parser.error("--rerun and --keep-completed cannot be combined")
     if args.start_step > args.end_step or args.cores < 1 or args.retries < 0 or args.sim_timeout_seconds <= 0:
         parser.error("Invalid step range, core count, retry count, or timeout")
     return args
