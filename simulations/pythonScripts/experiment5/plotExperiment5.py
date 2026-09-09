@@ -12,7 +12,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'experiment2'))
 from plotExperiment2 import (PROTOCOLS, USERS, USER_PATH_IDS, load_bundle, read_series, resample)
-from generateExperiment5IniFiles import WAVES
+from generateExperiment5IniFiles import WAVES, PATH_MBPS
 
 PHASES = ((0, 30, 'Initial'), (30, 60, 'Load P5/P6'), (60, 90, 'Recovery 1'),
           (90, 120, 'Load P1/P2'), (120, 150, 'Recovery 2'))
@@ -112,14 +112,14 @@ def heatmaps(frame, out):
             for j, label in enumerate(labels):
                 if (phase, label) in stat.index:
                     matrix[i, j] = stat.loc[(phase, label), 'mean']
-        im = ax.imshow(np.ma.masked_invalid(matrix), cmap='viridis', vmin=0, vmax=120, aspect='auto')
+        im = ax.imshow(np.ma.masked_invalid(matrix), cmap='viridis', vmin=0, vmax=4 * PATH_MBPS, aspect='auto')
         for i, (_, _, phase) in enumerate(PHASES):
             for j, label in enumerate(labels):
                 if np.isfinite(matrix[i, j]):
                     s = stat.loc[(phase, label)]
                     sd = f'{s["std"]:.1f}' if s['count'] > 1 else '—'
                     ax.text(j, i, f'{s["mean"]:.1f}\n±{sd}\nn={int(s["count"])}',
-                            ha='center', va='center', fontsize=7, color='white' if s['mean'] < 65 else 'black')
+                            ha='center', va='center', fontsize=7, color='white' if s['mean'] < 2 * PATH_MBPS else 'black')
         ax.set_xticks(range(len(labels)), labels, rotation=60, ha='right')
         ax.set_yticks(range(5), [p[2] for p in PHASES])
         ax.set_title(f'Connection {user}')

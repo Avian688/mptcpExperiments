@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Experiment 2 topology with two temporary waves of fixed MPORB competitors."""
 from pathlib import Path
+import math
 import sys
 import xml.etree.ElementTree as ET
 
@@ -13,6 +14,13 @@ EXPERIMENT_DIR = SCRIPT_DIR.parents[1] / 'experiments' / 'experiment5'
 WAVES = ((5, 0, 30, 60), (6, 5, 30, 60), (1, 10, 90, 120), (2, 15, 90, 120))
 PROTOCOLS = base.PROTOCOLS
 RUNS = base.RUNS
+PATH_MBPS = 100
+PATH_RTT_MS = base.PATH_RTT_MS
+MSS_BYTES = base.MSS_BYTES
+
+
+def bdp_packets():
+    return math.ceil(PATH_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
 
 
 def background_settings():
@@ -56,6 +64,13 @@ def main():
                .replace('experiment2Log', 'experiment5Log')
                .replace('tClose = -1s', 'tClose = 151s')
                .replace('sendBytes = 2GB', 'sendBytes = 1MiB') for s in general]
+    for i, line in enumerate(general):
+        if line.startswith('**.ppp[*].queue.packetCapacity ='):
+            general[i] = f'**.ppp[*].queue.packetCapacity = {bdp_packets()}'
+        elif line.startswith('# All eight paths are'):
+            general[i] = f'# All eight paths are {PATH_RTT_MS} ms / {PATH_MBPS} Mbps with one-BDP ({bdp_packets()} packet) queues.'
+        elif line.startswith('# Enter congestion avoidance at'):
+            general[i] = '# Foreground initialSsthresh is retained from experiment 2.'
     # Specific background overrides must precede general wildcard assignments.
     general[1:1] = background_settings()
     for protocol, settings in PROTOCOLS.items():
@@ -71,7 +86,7 @@ def main():
             '**.ppp[*].queue.typename = "DropTailQueue"',
             '**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"',
             '**.additiveIncreasePercent = 0.05', '**.eta = 0.95',
-            '**.alpha = 0.03', '**.fixedAvgRTTVal = 0', '',
+            '**.alpha = 0.03', '**.fixedAvgRTTVal = 0s', '',
         ]
         for run in RUNS:
             def write(line=''):

@@ -13,8 +13,9 @@ Experiments 2 and 4 are not modified by this experiment.
 | 120–150 s | Background admission disabled; A/B/C continue |
 
 A uses paths 1,2,3,4; B uses 1,2,5,6; C uses 3,4,7,8. Each path is
-30 Mbps with approximately 40 ms propagation RTT, two 10 Gbps access legs,
-and 104-packet queues (one BDP at MSS 1448). Added access links follow the
+100 Mbps with approximately 40 ms propagation RTT, two 10 Gbps access legs,
+and 346-packet queues (one BDP: 500,000 bytes, rounded up at MSS 1448).
+Added access links follow the
 original bottlenecks in NED so the bottleneck PPP indices stay unchanged.
 Each background host has a single physical attachment to its assigned path.
 Hosts 0–4 use path 5, 5–9 path 6, 10–14 path 1, and 15–19 path 2.
@@ -22,7 +23,8 @@ Hosts 0–4 use path 5, 5–9 path 6, 10–14 path 1, and 15–19 path 2.
 Backgrounds always use `MpOrb` / `MpOrbUncoupled` with one subflow, even when
 A/B/C use LIA, OLIA, or BALIA. Their initial slow-start threshold is 40,000 bytes,
 as in experiment 4. All forward bottlenecks use PintQueue so background MPORB
-receives PINT in every comparison. Other queue types, sizes and foreground
+receives PINT in every comparison. `fixedAvgRTTVal = 0s` includes the required
+time unit. Other queue types and foreground
 parameters follow experiment 2. PINT defaults include 8-bit encoding and flow
 count sketching.
 
@@ -86,7 +88,7 @@ of each phase, annotated with mean, sample SD and run count. `phase_runs.csv`
 and `phase_summary.csv` contain both whole-phase and final-ten-second summaries,
 including background goodput, subflow throughput and queue occupancy. These are
 measurement windows, not an assertion that convergence has occurred. No static
-80 Mbps fairness target is imposed during competition.
+equal-share fairness target is imposed during competition.
 
 Rates use the preceding 0.5-second measurement interval and a 0.5-second analysis
 grid; the first partial interval after connection establishment is approximate.
