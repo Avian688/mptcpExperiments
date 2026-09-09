@@ -221,17 +221,37 @@ def run_simulations(configs, args):
         raise RuntimeError(f"{len(failures)} failed runs; inspect {LOG_DIR}. Rerun to resume; failures are not plotted as zero.")
 
 
-def export_results(configs):
+def export_config(config):
+    target = CSV_DIR / "raw" / f'{config["config"]}.csv'
+    command = [tool_path("opp_scavetool"), "export", "-F", "CSV-R", "-o", str(target),
+               str(result_path(config, ".vec")), str(result_path(config, ".sca"))]
+    return run_logged_command(command, LOG_DIR / f'{config["config"]}.export.log', 1800)
+
+
+def export_results(configs, cores):
     raw_dir = CSV_DIR / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     for c in configs:
         if read_completion(c) is None:
             raise RuntimeError(f'No successful, unchanged result for {c["config"]}; run step 1 first')
-        target = raw_dir / f'{c["config"]}.csv'
-        command = [tool_path("opp_scavetool"), "export", "-F", "CSV-R", "-o", str(target),
-                   str(result_path(c, ".vec")), str(result_path(c, ".sca"))]
-        if not run_logged_command(command, LOG_DIR / f'{c["config"]}.export.log', 1800):
-            raise RuntimeError(f'Export failed: {c["config"]}')
+
+    executor = ThreadPoolExecutor(max_workers=cores)
+    try:
+        futures = {executor.submit(export_config, c): c for c in configs}
+        for index, future in enumerate(as_completed(futures), 1):
+            config = futures[future]
+            if not future.result():
+                raise RuntimeError(f'Export failed: {config["config"]}')
+            print(f'{index}/{len(configs)} EXPORTED {config["config"]}', flush=True)
+    except BaseException:
+        STOP.set()
+        with LOCK:
+            processes = list(ACTIVE)
+        for process in processes:
+            terminate(process)
+        raise
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
 
 def parse_args():
@@ -239,7 +259,8 @@ def parse_args():
     parser.add_argument("--start-step", type=int, choices=range(1, 5), default=1)
     parser.add_argument("--end-step", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--sim-time", type=float, default=SIM_TIME)
-    parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
+    parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")),
+                        help="Maximum concurrent simulations or scavetool exports")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--sim-timeout-seconds", type=float, default=8 * 3600)
     parser.add_argument("--configs", nargs="+", help="Exact configuration names to run or process")
@@ -283,7 +304,7 @@ def main():
     if args.start_step <= 1 <= args.end_step:
         run_simulations(configs, args)
     if args.start_step <= 2 <= args.end_step:
-        export_results(configs)
+        export_results(configs, args.cores)
     if args.start_step <= 3 <= args.end_step:
         for c in configs:
             completed = read_completion(c)

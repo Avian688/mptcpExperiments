@@ -57,8 +57,8 @@ network baliaresponsiveness
 
     connections:
         // Declare bottlenecks first so their queues are always ppp[0].
-        p1Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 20Mbps; } <--> p1Egress.pppg++;
-        p2Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 20Mbps; } <--> p2Egress.pppg++;
+        p1Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 100Mbps; } <--> p1Egress.pppg++;
+        p2Ingress.pppg++ <--> DatarateChannel { delay = 0ms; datarate = 100Mbps; } <--> p2Egress.pppg++;
 
         // Two 5 ms access legs in each direction give each path a 20 ms RTT.
         client[0].pppg++ <--> DatarateChannel { delay = 5ms; datarate = 10Gbps; } <--> p1Ingress.pppg++;

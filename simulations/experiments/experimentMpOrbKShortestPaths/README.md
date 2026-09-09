@@ -124,8 +124,8 @@ python3 runExperimentMpOrbKShortestPaths.py --runs 1 --cores 2
 # One configuration for initial runtime validation.
 python3 runExperimentMpOrbKShortestPaths.py --configs MpOrbAlpha_SanDiegoToSeattle_EdgeDisjoint_K2_Run1 --end-step 1 --cores 1
 
-# Resume export/extraction/plotting after completed simulations.
-python3 runExperimentMpOrbKShortestPaths.py --start-step 2
+# Resume with up to 30 parallel exports, then extract and plot.
+python3 runExperimentMpOrbKShortestPaths.py --start-step 2 --end-step 4 --cores 30
 
 # Replot available extracted data, with missing cells and n/5 shown explicitly.
 python3 plotExperimentMpOrbKShortestPaths.py
@@ -136,6 +136,8 @@ Steps are 1=simulate, 2=export, 3=extract, 4=plot; use `--start-step` and
 configuration names. Running again resumes successful runs. `--rerun` explicitly
 repeats selected completed runs. `EXPERIMENT_CORES`, `OPP_RUN`, and `OPP_SCAVETOOL`
 can override concurrency and executables.
+`--cores` limits both concurrent simulations (step 1) and concurrent scavetool
+exports (step 2). Extraction starts only after all selected exports succeed.
 
 By default, changed inputs or rebuilt libraries invalidate successful runs.
 `--keep-completed` explicitly ignores that fingerprint difference, while still
