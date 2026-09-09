@@ -4,6 +4,7 @@
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 
 import matplotlib
@@ -16,6 +17,7 @@ from generateExperimentMpOrbKShortestPathsIni import (
     EXPERIMENT_DIR, SIMULATIONS_DIR, MANIFEST_FILE, PAIR_DEFINITIONS, RUN_COUNT,
 )
 from extractSingleCsvFile import write_csv
+from parallelProcessing import run_parallel
 
 CSV_DIR = EXPERIMENT_DIR / "csvs"
 PLOT_DIR = SIMULATIONS_DIR / "plots" / "experimentMpOrbKShortestPaths"
@@ -130,8 +132,8 @@ def plot_goodput_lines(rows):
     save_figure(fig, "goodput_vs_path_count")
 
 
-def plot_timeseries(rows):
-    for pair, source, destination, *_ in PAIR_DEFINITIONS:
+def plot_timeseries(rows, pairs=PAIR_DEFINITIONS):
+    for pair, source, destination, *_ in pairs:
         fig, axes = plt.subplots(2, 1, figsize=(10, 6), sharex=True, layout="constrained")
         plotted = False
         for k in range(1, 6):
@@ -174,10 +176,22 @@ def plot_timeseries(rows):
         save_figure(fig, f"timeseries_{pair}")
 
 
-def plot_results(configs, timeseries=True):
-    rows = load_summaries(configs)
+def plot_job(job):
+    kind, rows, specification = job
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
-    records = []
+    if kind == "heatmap":
+        return plot_heatmap(rows, *specification)
+    if kind == "goodput":
+        plot_goodput_lines(rows)
+    elif kind == "timeseries":
+        plot_timeseries(rows, [specification])
+    else:
+        raise ValueError(f"Unknown plot job: {kind}")
+    return []
+
+
+def plot_results(configs, timeseries=True, cores=1):
+    rows = load_summaries(configs)
     specs = (
         ("goodput_mbps", "Receiver application goodput", "Mbps", [1, 2, 3, 4, 5], "viridis", (0, 100)),
         ("goodput_gain", "Alpha goodput / OrbCC on the same rank-1 catalog path", "Ratio (1 = baseline)", [2, 3, 4, 5], "RdYlGn", None),
@@ -185,17 +199,20 @@ def plot_results(configs, timeseries=True):
         ("highest_rank_rtt_ms", "Propagation RTT of the highest selected rank, when available", "ms", [1, 2, 3, 4, 5], "magma", None),
         ("sender_rtt_ms", "Measured TCP RTT at the sender (ACK-sample mean)", "ms", [1, 2, 3, 4, 5], "magma", None),
     )
-    for spec in specs:
-        records.extend(plot_heatmap(rows, *spec))
-    write_csv(PLOT_DIR / "plot_data.csv", list(records[0]), records)
-    plot_goodput_lines(rows)
+    jobs = [("heatmap", rows, spec) for spec in specs]
+    jobs.append(("goodput", rows, None))
     if timeseries:
-        plot_timeseries(rows)
+        jobs.extend(("timeseries", rows, pair) for pair in PAIR_DEFINITIONS)
+    records = [record for result in run_parallel(plot_job, jobs, cores) for record in result]
+    write_csv(PLOT_DIR / "plot_data.csv", list(records[0]), records)
     print(f"Plotted {len(rows)}/{len(configs)} extracted runs in {PLOT_DIR}; missing values remain blank")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--no-timeseries", action="store_true")
+    parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()
-    plot_results(json.loads(MANIFEST_FILE.read_text()), not args.no_timeseries)
+    if args.cores < 1:
+        parser.error("--cores must be positive")
+    plot_results(json.loads(MANIFEST_FILE.read_text()), not args.no_timeseries, cores=args.cores)

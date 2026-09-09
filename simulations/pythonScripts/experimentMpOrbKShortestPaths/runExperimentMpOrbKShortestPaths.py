@@ -260,7 +260,7 @@ def parse_args():
     parser.add_argument("--end-step", type=int, choices=range(1, 5), default=4)
     parser.add_argument("--sim-time", type=float, default=SIM_TIME)
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")),
-                        help="Maximum concurrent simulations or scavetool exports")
+                        help="Maximum workers for simulations, CSV exports, extraction, and plotting")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--sim-timeout-seconds", type=float, default=8 * 3600)
     parser.add_argument("--configs", nargs="+", help="Exact configuration names to run or process")
@@ -313,10 +313,10 @@ def main():
                     stat[1] for stat in completed["outputs"].values()):
                 raise RuntimeError(f'{c["config"]}: missing or stale export; run step 2 first')
         from extractSingleCsvFile import extract_results
-        extract_results(configs)
+        extract_results(configs, cores=args.cores)
     if args.start_step <= 4 <= args.end_step:
         from plotExperimentMpOrbKShortestPaths import plot_results
-        plot_results(configs)
+        plot_results(configs, cores=args.cores)
 
 
 if __name__ == "__main__":

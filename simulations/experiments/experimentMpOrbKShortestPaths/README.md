@@ -136,8 +136,12 @@ Steps are 1=simulate, 2=export, 3=extract, 4=plot; use `--start-step` and
 configuration names. Running again resumes successful runs. `--rerun` explicitly
 repeats selected completed runs. `EXPERIMENT_CORES`, `OPP_RUN`, and `OPP_SCAVETOOL`
 can override concurrency and executables.
-`--cores` limits both concurrent simulations (step 1) and concurrent scavetool
-exports (step 2). Extraction starts only after all selected exports succeed.
+`--cores` limits workers in all four stages: simulations, scavetool exports,
+per-run CSV extraction, and independent figures. Extraction and plotting use
+separate processes. Each stage completes before the next starts; combined
+summary CSVs are written after all extraction workers succeed. Plot concurrency
+is capped by the number of figures. The standalone extraction and plotting
+scripts also accept `--cores` and honor `EXPERIMENT_CORES`.
 
 By default, changed inputs or rebuilt libraries invalidate successful runs.
 `--keep-completed` explicitly ignores that fingerprint difference, while still

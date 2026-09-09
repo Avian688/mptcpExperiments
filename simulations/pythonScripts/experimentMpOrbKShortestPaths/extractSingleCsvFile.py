@@ -5,6 +5,7 @@ import argparse
 import csv
 import json
 import math
+import os
 import re
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from generateExperimentMpOrbKShortestPathsIni import EXPERIMENT_DIR, MANIFEST_FILE
+from parallelProcessing import run_parallel
 
 CSV_DIR = EXPERIMENT_DIR / "csvs"
 csv.field_size_limit(sys.maxsize)
@@ -161,10 +163,9 @@ def extract_config(config):
     return summary, paths
 
 
-def extract_results(configs):
+def extract_results(configs, cores=1):
     summaries, paths = [], []
-    for config in configs:
-        summary, path_rows = extract_config(config)
+    for summary, path_rows in run_parallel(extract_config, configs, cores):
         summaries.append(summary)
         paths.extend(path_rows)
     write_csv(CSV_DIR / "summary.csv", list(summaries[0]), summaries)
@@ -175,10 +176,13 @@ def extract_results(configs):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", help="Extract one named run, otherwise the entire matrix")
+    parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()
     configs = json.loads(MANIFEST_FILE.read_text())
     if args.config:
         configs = [c for c in configs if c["config"] == args.config]
+    if args.cores < 1:
+        parser.error("--cores must be positive")
     if not configs:
         parser.error("No matching configuration")
-    extract_results(configs)
+    extract_results(configs, cores=args.cores)
