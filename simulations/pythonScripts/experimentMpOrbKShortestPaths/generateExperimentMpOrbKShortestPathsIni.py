@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Edge-disjoint Alpha K=2..5 and policy-matched OrbCC/PINT K=1."""
+"""Separate edge-disjoint MPORB Alpha and Uncoupled batches, each K=1..5."""
 
 import argparse
 import json
@@ -19,6 +19,10 @@ from generateExperimentKShortestPathsIni import (
     K_PATH_SNAPSHOT_SET, load_ground_stations, endpoint_pair_specification,
 )
 
+BATCHES = {
+    "alpha": ("MpOrbAlpha", "MpOrbSemiCoupledAlpha"),
+    "uncoupled": ("MpOrbUncoupled", "MpOrbUncoupled"),
+}
 RUN_COUNT = 5
 PATH_COUNTS = (1, 2, 3, 4, 5)
 SIM_TIME = 300
@@ -32,20 +36,20 @@ def configurations(sim_time=SIM_TIME):
     if not 20 <= sim_time or not sim_time < float("inf"):
         raise ValueError("Simulation time must be finite and at least 20 seconds")
     configs = []
-    for group, (pair, source_city, destination_city, source, destination) in enumerate(PAIR_DEFINITIONS):
-        for k in PATH_COUNTS:
-            protocol = "OrbccPint" if k == 1 else "MpOrbAlpha"
-            for run in range(1, RUN_COUNT + 1):
-                seed = 4999 + run
-                start = round(random.Random(seed).uniform(1, 2), 6)
-                configs.append(dict(
-                    config=f"{protocol}_{pair}_EdgeDisjoint_K{k}_Run{run}",
-                    protocol=protocol, policy="EdgeDisjoint", pair=pair,
-                    source_city=source_city, destination_city=destination_city,
-                    source=source, destination=destination, path_group=group,
-                    k=k, run=run, seed=seed, start=start, sim_time=sim_time,
-                    measurement_start=WARMUP, measurement_end=sim_time - 1,
-                ))
+    for batch, (protocol, algorithm) in BATCHES.items():
+        for group, (pair, source_city, destination_city, source, destination) in enumerate(PAIR_DEFINITIONS):
+            for k in PATH_COUNTS:
+                for run in range(1, RUN_COUNT + 1):
+                    seed = 4999 + run
+                    start = round(random.Random(seed).uniform(1, 2), 6)
+                    configs.append(dict(
+                        config=f"{protocol}_{pair}_EdgeDisjoint_K{k}_Run{run}",
+                        protocol=protocol, batch=batch, policy="EdgeDisjoint", pair=pair,
+                        source_city=source_city, destination_city=destination_city,
+                        source=source, destination=destination, path_group=group,
+                        k=k, run=run, seed=seed, start=start, sim_time=sim_time,
+                        measurement_start=WARMUP, measurement_end=sim_time - 1,
+                    ))
     return configs
 
 
@@ -202,8 +206,8 @@ def generate_ini(sim_time=SIM_TIME):
             f.write(f'seed-set = {c["seed"]}\n')
             f.write(f'output-vector-file = "results/{c["config"]}-#0.vec"\n')
             f.write(f'output-scalar-file = "results/{c["config"]}-#0.sca"\n')
-            f.write(f'**.tcp.typename = "{"Orbtcp" if k == 1 else "MpOrb"}"\n')
-            f.write(f'**.tcp.tcpAlgorithmClass = "{"OrbtcpPintFlavour" if k == 1 else "MpOrbSemiCoupledAlpha"}"\n')
+            f.write('**.tcp.typename = "MpOrb"\n')
+            f.write(f'**.tcp.tcpAlgorithmClass = "{BATCHES[c["batch"]][1]}"\n')
             f.write(f'**.numberOfSubflows = {k}\n')
             f.write(f'**.ipv4.ip.kPathTcpPathGroup = {c["path_group"]}\n')
             f.write(f'**.ipv4.ip.kPathTcpSubflows = {k}\n')
@@ -211,15 +215,14 @@ def generate_ini(sim_time=SIM_TIME):
             f.write(f'*.userTerminal[{dst}].numApps = 1\n')
             f.write('*.userTerminal[*].numApps = 0\n')
             sender, receiver = f'*.userTerminal[{src}].app[0]', f'*.userTerminal[{dst}].app[0]'
-            f.write(f'{sender}.typename = "{"TcpGoodputSessionApp" if k == 1 else "MpTcpSessionApp"}"\n')
+            f.write(f'{sender}.typename = "MpTcpSessionApp"\n')
             f.write(f'{sender}.localPort = 4000\n{sender}.connectPort = 1000\n')
             f.write(f'{sender}.connectAddress = "userTerminal[{dst}]"\n')
             f.write(f'{sender}.tOpen = {c["start"]}s\n{sender}.tSend = {c["start"]}s\n')
-            # A small application write avoids adding another 2 GB to a queue
-            # already filled by handshake/ACK processing. Use a positive close
-            # time beyond the run: base TcpSessionApp does not honor -1 here.
+            # An application write enables persistent refill only on the sender.
+            # Keep application close beyond the measurement horizon.
             f.write(f'{sender}.tClose = {sim_time + 1:g}s\n{sender}.sendBytes = 1MiB\n{sender}.dataTransferMode = "bytecount"\n')
-            f.write(f'{receiver}.typename = "{"TcpSinkApp" if k == 1 else "MpTcpSinkApp"}"\n')
+            f.write(f'{receiver}.typename = "MpTcpSinkApp"\n')
             f.write(f'{receiver}.localPort = 1000\n')
             f.write(f'{receiver}.serverThreadModuleType = "tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread"\n')
             for rank in range(1, k + 1):
@@ -231,7 +234,7 @@ def generate_ini(sim_time=SIM_TIME):
                 f.write(f'{app}.startTime = 0.000002s\n{app}.stopTime = {sim_time:g}s\n')
                 f.write(f'{app}.sendInterval = 100ms\n{app}.printPing = false\n')
     MANIFEST_FILE.write_text(json.dumps(configs, indent=2) + "\n", encoding="utf-8")
-    print(f"Generated {len(configs)} configurations: 100 Alpha + 25 OrbCC/PINT; {sim_time:g}s each")
+    print(f"Generated {len(configs)} configurations: 125 Alpha + 125 Uncoupled; {sim_time:g}s each")
     return configs
 
 

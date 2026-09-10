@@ -20,7 +20,8 @@ from extractSingleCsvFile import write_csv
 from parallelProcessing import run_parallel
 
 CSV_DIR = EXPERIMENT_DIR / "csvs"
-PLOT_DIR = SIMULATIONS_DIR / "plots" / "experimentMpOrbKShortestPaths"
+PLOT_ROOT = SIMULATIONS_DIR / "plots" / "experimentMpOrbKShortestPaths"
+PLOT_DIR = PLOT_ROOT
 
 
 def load_summaries(configs):
@@ -45,7 +46,7 @@ def aggregate(rows, metric, ks):
     means = np.full((len(PAIR_DEFINITIONS), len(ks)), np.nan)
     deviations = means.copy()
     counts = np.zeros(means.shape, dtype=int)
-    baseline = {(r["pair"], r["run"]): r for r in rows if r["k"] == 1}
+    baseline = {(r["protocol"], r["pair"], r["run"]): r for r in rows if r["k"] == 1}
     records = []
     for i, (pair, *_rest) in enumerate(PAIR_DEFINITIONS):
         for j, k in enumerate(ks):
@@ -54,7 +55,7 @@ def aggregate(rows, metric, ks):
                 if r["pair"] != pair or r["k"] != k:
                     continue
                 if metric == "goodput_gain":
-                    b = baseline.get((pair, r["run"]))
+                    b = baseline.get((r["protocol"], pair, r["run"]))
                     if b is None or b["seed"] != r["seed"] or b["measurement_start"] != r["measurement_start"] or b["measurement_end"] != r["measurement_end"]:
                         continue
                     value = r["goodput_mbps"] / b["goodput_mbps"] if b["goodput_mbps"] > 0 else math.nan
@@ -68,9 +69,13 @@ def aggregate(rows, metric, ks):
                 means[i, j] = np.mean(values)
             if n > 1:
                 deviations[i, j] = np.std(values, ddof=1)
-            records.append(dict(pair=pair, k=k, metric=metric, mean=means[i, j],
+            records.append(dict(protocol=rows[0]["protocol"] if rows else "", pair=pair, k=k, metric=metric, mean=means[i, j],
                                 std=deviations[i, j], n=n, expected_n=RUN_COUNT))
     return means, deviations, counts, records
+
+
+def batch_label(rows):
+    return "MPORB Alpha" if rows[0]["protocol"] == "MpOrbAlpha" else "MPORB Uncoupled"
 
 
 def pair_labels():
@@ -108,9 +113,9 @@ def plot_heatmap(rows, metric, title, unit, ks, cmap_name="RdYlGn", limits=None)
             else:
                 label, color = "—", "#555555"
             ax.text(j, i, label, ha="center", va="center", color=color, fontsize=8.5)
-    ax.set_xticks(range(len(ks)), ["OrbCC\nK=1" if k == 1 else f"Alpha\nK={k}" for k in ks])
+    ax.set_xticks(range(len(ks)), [f"K={k}" for k in ks])
     ax.set_yticks(range(len(PAIR_DEFINITIONS)), pair_labels())
-    ax.set_title(title + "\nEdge-disjoint core paths; mean ± sample SD across matched seeds", fontsize=12, pad=12)
+    ax.set_title(batch_label(rows) + " · " + title + "\nEdge-disjoint core paths; mean ± sample SD across matched seeds", fontsize=12, pad=12)
     fig.colorbar(im, ax=ax, label=unit, shrink=0.83)
     save_figure(fig, metric)
     return records
@@ -123,9 +128,9 @@ def plot_goodput_lines(rows):
     for i, label in enumerate(pair_labels()):
         ax.errorbar(ks, means[i], yerr=np.where(counts[i] > 1, deviations[i], 0),
                     marker="o", capsize=3, label=label)
-    ax.set_xticks(ks, ["OrbCC\nK=1", "Alpha\nK=2", "Alpha\nK=3", "Alpha\nK=4", "Alpha\nK=5"])
+    ax.set_xticks(ks, [f"K={k}" for k in ks])
     ax.set_ylabel("Receiver application goodput (Mbps)")
-    ax.set_title("Goodput versus requested path count · error bars: sample SD")
+    ax.set_title(batch_label(rows) + " · Goodput versus path count · error bars: sample SD")
     ax.set_ylim(bottom=0)
     ax.grid(alpha=0.2)
     ax.legend(fontsize=9)
@@ -153,7 +158,7 @@ def plot_timeseries(rows, pairs=PAIR_DEFINITIONS):
             plotted = True
             values = np.stack(series)
             mean = np.mean(values, axis=0)
-            label = "OrbCC K=1" if k == 1 else f"Alpha K={k}"
+            label = f"K={k}"
             line, = axes[0].plot(times, mean[:, 0], label=label, linewidth=1.2)
             if len(series) > 1:
                 sd = np.std(values[:, :, 0], axis=0, ddof=1)
@@ -163,7 +168,7 @@ def plot_timeseries(rows, pairs=PAIR_DEFINITIONS):
         if not plotted:
             plt.close(fig)
             continue
-        axes[0].set_title(f"{source} → {destination} · goodput and catalog availability")
+        axes[0].set_title(f"{batch_label(rows)} · {source} → {destination} · goodput and catalog availability")
         axes[0].set_ylabel("Application goodput (Mbps)")
         axes[0].set_ylim(bottom=0)
         axes[0].legend(ncol=3, fontsize=8)
@@ -177,7 +182,9 @@ def plot_timeseries(rows, pairs=PAIR_DEFINITIONS):
 
 
 def plot_job(job):
-    kind, rows, specification = job
+    global PLOT_DIR
+    kind, rows, specification, batch = job
+    PLOT_DIR = PLOT_ROOT / batch
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
     if kind == "heatmap":
         return plot_heatmap(rows, *specification)
@@ -194,25 +201,34 @@ def plot_results(configs, timeseries=True, cores=1):
     rows = load_summaries(configs)
     specs = (
         ("goodput_mbps", "Receiver application goodput", "Mbps", [1, 2, 3, 4, 5], "RdYlGn", (0, 100)),
-        ("goodput_gain", "Alpha goodput / OrbCC on the same rank-1 catalog path", "Ratio (1 = baseline)", [2, 3, 4, 5], "RdYlGn", None),
+        ("goodput_gain", "Goodput / same-protocol K=1", "Ratio (1 = baseline)", [2, 3, 4, 5], "RdYlGn", None),
         ("all_k_available_pct", "Time with all K requested ranks present in the catalog", "% of measurement window", [1, 2, 3, 4, 5], "RdYlGn", (0, 100)),
         ("highest_rank_rtt_ms", "Propagation RTT of the highest selected rank, when available", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
         ("sender_rtt_ms", "Measured TCP RTT at the sender (ACK-sample mean)", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
     )
-    jobs = [("heatmap", rows, spec) for spec in specs]
-    jobs.append(("goodput", rows, None))
-    if timeseries:
-        jobs.extend(("timeseries", rows, pair) for pair in PAIR_DEFINITIONS)
-    records = [record for result in run_parallel(plot_job, jobs, cores) for record in result]
-    write_csv(PLOT_DIR / "plot_data.csv", list(records[0]), records)
-    print(f"Plotted {len(rows)}/{len(configs)} extracted runs in {PLOT_DIR}; missing values remain blank")
+    for batch in sorted({c["batch"] for c in configs}):
+        batch_rows = [r for r in rows if r["batch"] == batch]
+        if not batch_rows:
+            continue
+        jobs = [("heatmap", batch_rows, spec, batch) for spec in specs]
+        jobs.append(("goodput", batch_rows, None, batch))
+        if timeseries:
+            jobs.extend(("timeseries", batch_rows, pair, batch) for pair in PAIR_DEFINITIONS)
+        records = [record for result in run_parallel(plot_job, jobs, cores) for record in result]
+        write_csv(PLOT_ROOT / batch / "plot_data.csv", list(records[0]), records)
+        print(f"Plotted {len(batch_rows)} extracted runs in {PLOT_ROOT / batch}; missing values remain blank")
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--batch", choices=("alpha", "uncoupled", "all"), default="all")
     parser.add_argument("--no-timeseries", action="store_true")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()
     if args.cores < 1:
         parser.error("--cores must be positive")
-    plot_results(json.loads(MANIFEST_FILE.read_text()), not args.no_timeseries, cores=args.cores)
+    configs = json.loads(MANIFEST_FILE.read_text())
+    if args.batch != "all":
+        configs = [c for c in configs if c["batch"] == args.batch]
+    plot_results(configs, not args.no_timeseries, cores=args.cores)

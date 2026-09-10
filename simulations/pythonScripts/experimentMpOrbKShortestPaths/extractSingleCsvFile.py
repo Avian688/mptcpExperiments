@@ -128,7 +128,7 @@ def extract_config(config):
             raise ValueError(f"{name}: incomplete path availability samples")
         expected_rtt = get_metric("kPathExpectedRtt")
         valid = (availability == 1) & (expected_rtt >= 0)
-        paths.append(dict(config=name, pair=config["pair"], k=config["k"], run=config["run"],
+        paths.append(dict(config=name, protocol=config["protocol"], batch=config["batch"], pair=config["pair"], k=config["k"], run=config["run"],
                           rank=rank, available_fraction=float(np.mean(availability)),
                           expected_rtt_ms=float(np.mean(expected_rtt[valid]) * 1000) if np.any(valid) else math.nan))
         available.append(availability)
@@ -168,17 +168,23 @@ def extract_results(configs, cores=1):
     for summary, path_rows in run_parallel(extract_config, configs, cores):
         summaries.append(summary)
         paths.extend(path_rows)
-    write_csv(CSV_DIR / "summary.csv", list(summaries[0]), summaries)
-    write_csv(CSV_DIR / "path_summary.csv", list(paths[0]), paths)
+    for batch in sorted({s["batch"] for s in summaries}):
+        selected = [s for s in summaries if s["batch"] == batch]
+        selected_paths = [p for p in paths if p["batch"] == batch]
+        write_csv(CSV_DIR / batch / "summary.csv", list(selected[0]), selected)
+        write_csv(CSV_DIR / batch / "path_summary.csv", list(selected_paths[0]), selected_paths)
     print(f"Extracted {len(summaries)} runs to {CSV_DIR}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--batch", choices=("alpha", "uncoupled", "all"), default="all")
     parser.add_argument("--config", help="Extract one named run, otherwise the entire matrix")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()
     configs = json.loads(MANIFEST_FILE.read_text())
+    if args.batch != "all":
+        configs = [c for c in configs if c["batch"] == args.batch]
     if args.config:
         configs = [c for c in configs if c["config"] == args.config]
     if args.cores < 1:

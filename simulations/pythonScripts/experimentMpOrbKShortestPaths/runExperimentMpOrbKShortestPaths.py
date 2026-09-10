@@ -263,6 +263,8 @@ def parse_args():
                         help="Maximum workers for simulations, CSV exports, extraction, and plotting")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--sim-timeout-seconds", type=float, default=8 * 3600)
+    parser.add_argument("--batch", choices=("alpha", "uncoupled", "all"), default="all",
+                        help="Protocol batch (default: all); each batch includes K=1..5")
     parser.add_argument("--configs", nargs="+", help="Exact configuration names to run or process")
     parser.add_argument("--runs", nargs="+", type=int, choices=range(1, 6), help="Restrict run numbers (default all five)")
     parser.add_argument("--rerun", action="store_true", help="Rerun selected successful configurations")
@@ -281,6 +283,8 @@ def parse_args():
 def main():
     args = parse_args()
     configs = generate_ini(args.sim_time) if args.start_step == 1 else json.loads(MANIFEST_FILE.read_text())
+    if args.batch != "all":
+        configs = [c for c in configs if c["batch"] == args.batch]
     if args.configs:
         unknown = set(args.configs) - {c["config"] for c in configs}
         if unknown:

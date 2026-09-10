@@ -1,15 +1,18 @@
-# MPORB Alpha on saved edge-disjoint LEO paths
+# MPORB Alpha and Uncoupled on saved edge-disjoint LEO paths
 
-125 simulations: five city pairs × five treatments × five seeds. Only the
+Two separate batches, each with 125 simulations: five city pairs × K=1–5 × five seeds.
+There are 250 simulations when both batches are selected. Only the
 **EdgeDisjoint** policy is included; shared-link policies are deferred.
 
-| Treatment | Transport | Saved RTT ranks |
+| Batch | Transport and algorithm | Subflows |
 |---|---|---|
-| K=1 baseline | Single-path `Orbtcp` / `OrbtcpPintFlavour` | 1 |
-| K=2 | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1–2 |
-| K=3 | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1–3 |
-| K=4 | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1–4 |
-| K=5 | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1–5 |
+| `alpha` | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1, 2, 3, 4, 5 |
+| `uncoupled` | `MpOrb` / `MpOrbUncoupled` | 1, 2, 3, 4, 5 |
+
+K=1 uses the full MPORB transport with one subflow and the batch's own algorithm.
+There is no separate OrbCC baseline in this matrix. Each batch's gain heatmap
+compares K=2–5 with its own matched K=1 run. Both batches use identical seeds,
+start times and routes. Rank selection always takes the first K saved RTT ranks.
 
 City pairs, in the original catalog order: San Diego–Seattle, Seattle–New York,
 San Diego–New York, New York–London, San Diego–Shanghai. Each simulation has one
@@ -29,7 +32,7 @@ of the saved ten-path catalog, rather than recomputing a different K-path set.
 Ranks are ordered by increasing propagation RTT within each current snapshot;
 rank 2 need not retain the same physical route throughout the simulation.
 
-The baseline uses rank 1 of that **same edge-disjoint catalog**. It is not a
+Each batch's baseline uses rank 1 of that **same edge-disjoint catalog**. It is not a
 globally unrestricted shortest-path baseline: the minimum-cost disjoint set can
 differ from the unrestricted set. This isolates the effect of adding ranks 2–5.
 
@@ -71,12 +74,11 @@ handshakes or uninterrupted delivery during access handover.
 
 The default duration is **300 seconds**. The existing transport-level
 `TcpPacedConnection::enqueueData()` replenishes the queue to 2,000,000,000 bytes
-as ACKs advance. OrbCC and the MPTCP meta connection call it, so the workload is
-persistent rather than a finite 2 GB transfer. The application sends an initial
-1 MiB write and closes at 301 s, beyond the simulation horizon. A small initial
-write avoids appending another 2 GB to a queue already filled during handshake
-processing. A positive close time also avoids the base `TcpSessionApp` behavior
-that schedules an immediate close for `tClose=-1`.
+as ACKs advance, after a nonempty application write enables refill for that
+sending direction. The workload is persistent rather than a finite 2 GB transfer.
+The application sends an initial 1 MiB write and closes at 301 s. Use libraries
+rebuilt with the application-write refill guard: receive-only sinks must not
+manufacture reverse payload. The same guard stops refill when closing.
 
 `--sim-time` accepts durations of at least 20 seconds and keeps the application
 close time beyond the selected horizon. Saved routes must cover the full duration.
@@ -103,7 +105,7 @@ your default `python3` does not have them. Analysis dependencies are checked bef
 the runner starts a pipeline that includes extraction or plotting.
 
 ```sh
-# Generate and inspect the 125 configurations; no simulations.
+# Generate and inspect all 250 configurations; no simulations.
 python3 runExperimentMpOrbKShortestPaths.py --dry-run
 
 # Check both primary and edge-disjoint saved snapshot coverage; no simulations.
@@ -112,13 +114,16 @@ python3 runExperimentMpOrbKShortestPaths.py --check-routes
 # If the saved corpus is absent, generate only the required policy first.
 python3 ../experimentKShortestPaths/runExperimentKShortestPathsSaveFiles.py --policies EdgeDisjoint --sim-time 300 --cores 1
 
-# Run, export CSV-R, extract, then plot. Default concurrency is two.
-python3 runExperimentMpOrbKShortestPaths.py --cores 2
+# Full experiment: both algorithms, K=1..5, five pairs, five seeds (250 runs).
+python3 runExperimentMpOrbKShortestPaths.py --cores 10
 
-# Preserve completed runs after the teardown-only fix; run failed/missing sims.
-python3 runExperimentMpOrbKShortestPaths.py --sim-time 300 --cores 10 --keep-completed --retries 0
+# Alpha batch only (125 runs).
+python3 runExperimentMpOrbKShortestPaths.py --batch alpha --cores 10
 
-# Small first batch: five pairs × five treatments × one seed = 25 runs.
+# Independent Uncoupled batch: the same 125 settings.
+python3 runExperimentMpOrbKShortestPaths.py --batch uncoupled --cores 10
+
+# Small first batch: two protocols × five pairs × five treatments × one seed = 50 runs.
 python3 runExperimentMpOrbKShortestPaths.py --runs 1 --cores 2
 
 # One configuration for initial runtime validation.
@@ -133,7 +138,15 @@ python3 plotExperimentMpOrbKShortestPaths.py
 
 Steps are 1=simulate, 2=export, 3=extract, 4=plot; use `--start-step` and
 `--end-step` to limit work. `--runs` selects seeds and `--configs` selects exact
-configuration names. Running again resumes successful runs. `--rerun` explicitly
+configuration names. Both batches run by default (`--batch all`). Use
+`--batch alpha` or `--batch uncoupled` to restrict the experiment to one algorithm. Use the same batch selector when
+resuming later steps or running the standalone extractor/plotter. The generator
+always writes the complete 250-entry matrix; batch selection filters execution.
+Plots and batch summary CSVs are separate, so processing one cannot overwrite
+the other. Old root-level OrbCC comparison plots remain legacy outputs.
+The new batch metadata invalidates older completion markers and extracted
+summaries. Do not preserve pre-refill-fix runs as the new one-way workload.
+Running again resumes successful runs. `--rerun` explicitly
 repeats selected completed runs. `EXPERIMENT_CORES`, `OPP_RUN`, and `OPP_SCAVETOOL`
 can override concurrency and executables.
 `--cores` limits workers in all four stages: simulations, scavetool exports,
@@ -165,13 +178,13 @@ runs are retried once by default and never included as zero-goodput successes.
 - `csvs/raw/`: CSV-R exports.
 - `csvs/extracted/<config>/`: vectors retaining original connection/thread IDs,
   `summary.json`, `paths.csv`, and `timeseries.csv`.
-- `csvs/summary.csv`, `csvs/path_summary.csv`: selected runs and per-rank summaries.
-- `../../plots/experimentMpOrbKShortestPaths/`: PNG/PDF heatmaps, the goodput vs K
+- `csvs/<batch>/summary.csv`, `csvs/<batch>/path_summary.csv`: selected runs and per-rank summaries.
+- `../../plots/experimentMpOrbKShortestPaths/<batch>/`: PNG/PDF heatmaps, the goodput vs K
   chart, five city-pair time-series plots, and numerical `plot_data.csv`.
 - `../../logs/experimentMpOrbKShortestPaths/`: individual attempts and exports.
 
 Heatmaps use city pairs as rows and requested K as columns: application goodput,
-Alpha/baseline goodput ratio, all-K catalog availability, highest selected rank's
+within-batch K=1 goodput ratio, all-K catalog availability, highest selected rank's
 propagation RTT, and measured sender TCP RTT. Cells show mean ± sample standard
 deviation. Run counts are retained in `plot_data.csv` but omitted from plot labels.
 Heatmaps use red for worse and green for better: higher goodput, gain and
