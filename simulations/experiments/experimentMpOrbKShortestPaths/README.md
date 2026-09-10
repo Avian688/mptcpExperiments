@@ -127,7 +127,7 @@ python3 runExperimentMpOrbKShortestPaths.py --configs MpOrbAlpha_SanDiegoToSeatt
 # Resume with up to 30 parallel exports, then extract and plot.
 python3 runExperimentMpOrbKShortestPaths.py --start-step 2 --end-step 4 --cores 30
 
-# Replot available extracted data, with missing cells and n/5 shown explicitly.
+# Replot available extracted data; missing cells remain gray.
 python3 plotExperimentMpOrbKShortestPaths.py
 ```
 
@@ -173,7 +173,10 @@ runs are retried once by default and never included as zero-goodput successes.
 Heatmaps use city pairs as rows and requested K as columns: application goodput,
 Alpha/baseline goodput ratio, all-K catalog availability, highest selected rank's
 propagation RTT, and measured sender TCP RTT. Cells show mean ± sample standard
-deviation and n/5. The ratio is averaged over **matched per-seed ratios**, not a
+deviation. Run counts are retained in `plot_data.csv` but omitted from plot labels.
+Heatmaps use red for worse and green for better: higher goodput, gain and
+availability are greener; lower RTT is greener. Missing cells remain gray.
+The ratio is averaged over **matched per-seed ratios**, not a
 ratio of unrelated means. Missing/failed measurements and zero-denominator ratios
 remain blank. Baselines are not repeated per Alpha K.
 

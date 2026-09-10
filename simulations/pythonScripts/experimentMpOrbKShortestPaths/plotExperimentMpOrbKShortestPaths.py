@@ -84,7 +84,7 @@ def save_figure(fig, name):
     plt.close(fig)
 
 
-def plot_heatmap(rows, metric, title, unit, ks, cmap_name="viridis", limits=None):
+def plot_heatmap(rows, metric, title, unit, ks, cmap_name="RdYlGn", limits=None):
     means, deviations, counts, records = aggregate(rows, metric, ks)
     fig, ax = plt.subplots(figsize=(10.8, 5.4), layout="constrained")
     cmap = plt.get_cmap(cmap_name).copy()
@@ -101,12 +101,12 @@ def plot_heatmap(rows, metric, title, unit, ks, cmap_name="viridis", limits=None
         for j in range(means.shape[1]):
             mean, sd, n = means[i, j], deviations[i, j], counts[i, j]
             if n:
-                label = f"{mean:.2f}" + (f" ± {sd:.2f}" if n > 1 else "") + f"\n(n={n}/{RUN_COUNT})"
+                label = f"{mean:.2f}" + (f" ± {sd:.2f}" if n > 1 else "")
                 rgba = im.cmap(im.norm(mean))
                 luminance = sum(a * b for a, b in zip(rgba[:3], (0.2126, 0.7152, 0.0722)))
                 color = "black" if luminance > 0.5 else "white"
             else:
-                label, color = "—\n(n=0/5)", "#555555"
+                label, color = "—", "#555555"
             ax.text(j, i, label, ha="center", va="center", color=color, fontsize=8.5)
     ax.set_xticks(range(len(ks)), ["OrbCC\nK=1" if k == 1 else f"Alpha\nK={k}" for k in ks])
     ax.set_yticks(range(len(PAIR_DEFINITIONS)), pair_labels())
@@ -153,7 +153,7 @@ def plot_timeseries(rows, pairs=PAIR_DEFINITIONS):
             plotted = True
             values = np.stack(series)
             mean = np.mean(values, axis=0)
-            label = ("OrbCC K=1" if k == 1 else f"Alpha K={k}") + f" (n={len(series)})"
+            label = "OrbCC K=1" if k == 1 else f"Alpha K={k}"
             line, = axes[0].plot(times, mean[:, 0], label=label, linewidth=1.2)
             if len(series) > 1:
                 sd = np.std(values[:, :, 0], axis=0, ddof=1)
@@ -193,11 +193,11 @@ def plot_job(job):
 def plot_results(configs, timeseries=True, cores=1):
     rows = load_summaries(configs)
     specs = (
-        ("goodput_mbps", "Receiver application goodput", "Mbps", [1, 2, 3, 4, 5], "viridis", (0, 100)),
+        ("goodput_mbps", "Receiver application goodput", "Mbps", [1, 2, 3, 4, 5], "RdYlGn", (0, 100)),
         ("goodput_gain", "Alpha goodput / OrbCC on the same rank-1 catalog path", "Ratio (1 = baseline)", [2, 3, 4, 5], "RdYlGn", None),
-        ("all_k_available_pct", "Time with all K requested ranks present in the catalog", "% of measurement window", [1, 2, 3, 4, 5], "viridis", (0, 100)),
-        ("highest_rank_rtt_ms", "Propagation RTT of the highest selected rank, when available", "ms", [1, 2, 3, 4, 5], "magma", None),
-        ("sender_rtt_ms", "Measured TCP RTT at the sender (ACK-sample mean)", "ms", [1, 2, 3, 4, 5], "magma", None),
+        ("all_k_available_pct", "Time with all K requested ranks present in the catalog", "% of measurement window", [1, 2, 3, 4, 5], "RdYlGn", (0, 100)),
+        ("highest_rank_rtt_ms", "Propagation RTT of the highest selected rank, when available", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
+        ("sender_rtt_ms", "Measured TCP RTT at the sender (ACK-sample mean)", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
     )
     jobs = [("heatmap", rows, spec) for spec in specs]
     jobs.append(("goodput", rows, None))
