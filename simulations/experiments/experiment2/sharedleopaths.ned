@@ -22,7 +22,7 @@ network sharedleopaths
         channel bottleneckPath extends DatarateChannel
         {
             delay = 0ms;
-            datarate = 30Mbps;
+            datarate = 100Mbps;
         }
 
     submodules:

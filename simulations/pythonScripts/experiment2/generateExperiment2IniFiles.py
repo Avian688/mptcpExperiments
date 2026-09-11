@@ -7,7 +7,7 @@ import random
 from pathlib import Path
 
 MSS_BYTES = 1448
-PATH_MBPS = 30
+PATH_MBPS = 100
 PATH_RTT_MS = 40
 RUNS = range(1, 6)
 START_RANDOM_WINDOW_S = 5.0
@@ -260,7 +260,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
         write("**.alpha = 0.03")
-        write("**.fixedAvgRTTVal = 0")
+        write("**.fixedAvgRTTVal = 0s")
     write()
 
 
@@ -281,20 +281,21 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
 
 def main() -> None:
     expected_packets = bdp_packets()
-    if expected_packets != 104:
+    if expected_packets != 346:
         raise RuntimeError(f"unexpected BDP packet count: {expected_packets}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
     for protocol, settings in PROTOCOLS.items():
         out_path = EXPERIMENT_DIR / f"experiment2_{protocol}.ini"
-        with out_path.open("w", encoding="utf-8") as output:
-            def write(line: str = "") -> None:
-                output.write(line + "\n")
+        lines = []
+        def write(line: str = "") -> None:
+            lines.append(line)
 
-            write_common_general(write)
-            write_protocol_settings(write, protocol, settings)
-            for run in RUNS:
-                write_config(write, settings, run)
+        write_common_general(write)
+        write_protocol_settings(write, protocol, settings)
+        for run in RUNS:
+            write_config(write, settings, run)
+        out_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
         print(f"Generated {out_path}.")
 
 

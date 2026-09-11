@@ -15,6 +15,8 @@ import pandas as pd
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import Normalize
 
+from generateExperiment2IniFiles import MSS_BYTES, PATH_MBPS
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from plotHelpers import (
     HIGH_IS_GOOD_CMAP,
@@ -56,8 +58,7 @@ PATH_QUEUE_MODULES = {
     7: "sharedleopaths.router1[6].ppp[1].queue",
     8: "sharedleopaths.router1[7].ppp[1].queue",
 }
-MSS_BYTES = 1448
-PATH_CAPACITY_MBPS = 30.0
+PATH_CAPACITY_MBPS = float(PATH_MBPS)
 TOTAL_PATH_CAPACITY_MBPS = len(PATH_QUEUE_MODULES) * PATH_CAPACITY_MBPS
 DEFAULT_RUNS = [1, 2, 3, 4, 5]
 
