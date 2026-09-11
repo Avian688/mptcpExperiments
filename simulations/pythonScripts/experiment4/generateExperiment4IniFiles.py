@@ -306,7 +306,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
         write("**.alpha = 0.03")
-        write("**.fixedAvgRTTVal = 0")
+        write("**.fixedAvgRTTVal = 0s")
     write()
 
 
