@@ -9,44 +9,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-VECTORS_TO_EXTRACT = {
-    "goodput",
-    "throughput",
-    "cwnd",
-    "cwndLimited",
-    "lossRecovery",
-    "numRtos",
-    "retransmissionRate",
-    "liaAlpha",
-    "oliaEpsilon",
-    "baliaAi",
-    "baliaMd",
-    "semiCoupledAlphaSubflowRate",
-    "semiCoupledAlphaConnectionRate",
-    "semiCoupledAlphaRateShare",
-    "mpOrbOliaBestPath",
-    "mpOrbOliaMaxWindowPath",
-    "mpOrbOliaCorrection",
-    "mpOrbOliaPathPrice",
-    "mpOrbOliaPathOpportunity",
-    "mpOrbOliaNormalizedWindow",
-    "semiCoupledBetaFairRate",
-    "semiCoupledBetaTotalFairRate",
-    "semiCoupledBetaFairRateShare",
-    "holBlockedBytes",
-    "subflowSendQueueBytes",
-    "metaReinjectedBytes",
-    "metaReinjections",
-    "semiCoupledEpsilonPathCost",
-    "semiCoupledEpsilonDesiredShare",
-    "semiCoupledEpsilonRateShare",
-    "semiCoupledEpsilonRedistribution",
-    "semiCoupledThetaFairRate",
-    "semiCoupledThetaHeadroomRate",
-    "semiCoupledThetaAiShare",
-    "semiCoupledThetaConnectionAiRate",
-    "queueLength",
-}
+from generateExperimentSchedulerIniFiles import METRICS
+VECTORS_TO_EXTRACT = set(METRICS)
 
 
 def parse_if_number(value: str):
@@ -130,7 +94,7 @@ def main() -> int:
     out_root = (
         Path(__file__).resolve().parents[2]
         / "experiments"
-        / "experiment4"
+        / "experimentScheduler"
         / "csvs"
         / protocol
         / f"run{run}"
