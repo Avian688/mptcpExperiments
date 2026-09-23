@@ -14,7 +14,7 @@ SIM_ROOT = Path(__file__).resolve().parents[2]
 CSV_ROOT = SIM_ROOT / 'experiments/experimentScheduler/csvs'
 OUT = SIM_ROOT / 'plots/experimentScheduler'
 PHASES = {'baseline': (10, 40), 'competition': (40, 80), 'recovery': (80, 120)}
-COLORS = {'default': '#2878b5', 'intBurst': '#e47722'}
+COLORS = {'default': '#2878b5', 'defaultCwnd': '#31945b', 'intBurst': '#e47722'}
 
 
 def read_series(path, metric):
@@ -161,6 +161,38 @@ def main():
         ax.legend()
     axes[-1,0].set_xlabel('Time (s); line = run mean, shading = run range')
     save(fig, OUT/'goodput_comparison')
+    # Mean and sample variance across runs, at each time bin. Variance has
+    # squared units; show it separately rather than adding it to the mean.
+    fig, axes = plt.subplots(2, len(PROFILES), figsize=(12, 7), squeeze=False)
+    stats = []
+    for j, profile in enumerate(PROFILES):
+        for scheduler in SCHEDULERS:
+            values = curves.get((profile, scheduler))
+            if values is None:
+                continue
+            mean = values.mean(axis=0)
+            variance = values.var(axis=0, ddof=1) if len(values)>1 else np.full_like(mean, np.nan)
+            std = np.sqrt(variance)
+            axes[0,j].plot(grid, mean, label=scheduler, color=COLORS[scheduler])
+            if len(values)>1:
+                axes[0,j].fill_between(grid, mean-std, mean+std, color=COLORS[scheduler], alpha=0.15)
+                axes[1,j].plot(grid, variance, label=scheduler, color=COLORS[scheduler])
+            for t, m, v in zip(grid, mean, variance):
+                stats.append(dict(profile=profile, scheduler=scheduler, time_s=t,
+                                  mean_mbps=m, variance_mbps2=v, runs=len(values)))
+        axes[0,j].set_title(f'RTT {PROFILES[profile][0]}/{PROFILES[profile][1]} ms')
+        axes[0,j].set_ylabel('Mean goodput ± 1 SD (Mbps)')
+        axes[1,j].set_ylabel('Goodput variance (Mbps²)')
+        axes[1,j].set_xlabel('Time (s)')
+        for ax in axes[:,j]:
+            decorate(ax)
+            ax.set_ylim(bottom=0)
+            if ax.get_legend_handles_labels()[0]:
+                ax.legend()
+    save(fig, OUT/'goodput_mean_variance')
+    pd.DataFrame(stats).to_csv(OUT/'goodput_time_statistics.csv', index=False)
+
+    # Per-run points expose the distribution; larger markers show mean ± SD.
     fig, axes = plt.subplots(len(PROFILES), len(PHASES), figsize=(12, 6), squeeze=False)
     for i, profile in enumerate(PROFILES):
         for j, phase in enumerate(PHASES):
@@ -168,12 +200,17 @@ def main():
             for k, scheduler in enumerate(SCHEDULERS):
                 vals=summary.loc[(summary.profile==profile)&(summary.scheduler==scheduler)&(summary.phase==phase), 'foreground_goodput_mbps']
                 if len(vals):
-                    ax.bar(k, vals.mean(), yerr=vals.std(ddof=1) if len(vals)>1 else 0,
-                           color=COLORS[scheduler], capsize=4)
-            ax.set_xticks(range(2), SCHEDULERS)
+                    offsets = np.linspace(-0.13, 0.13, len(vals)) if len(vals)>1 else np.array([0.])
+                    ax.scatter(k+offsets, vals, color=COLORS[scheduler], alpha=0.45, s=22)
+                    ax.errorbar(k, vals.mean(), yerr=vals.std(ddof=1) if len(vals)>1 else None,
+                                fmt='D', color=COLORS[scheduler], capsize=5, markersize=6)
+            ax.set_xticks(range(len(SCHEDULERS)), SCHEDULERS, rotation=15)
+            ax.set_xlim(-0.5, len(SCHEDULERS)-0.5)
             ax.set_ylim(bottom=0)
+            ax.grid(axis='y', alpha=0.2)
             ax.set_title(f'{profile}: {phase}')
-            ax.set_ylabel('Mean goodput (Mbps)')
+            ax.set_ylabel('Phase goodput (Mbps)')
+    fig.suptitle('Individual runs and mean ± 1 sample standard deviation')
     save(fig, OUT/'phase_goodput')
     print(f'Wrote plots and summaries to {OUT}')
     if missing:

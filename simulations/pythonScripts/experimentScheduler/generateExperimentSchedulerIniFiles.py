@@ -215,7 +215,7 @@ def write_common_general(write) -> None:
 
 
 PROFILES = {"equal": (20, 20), "longer": (20, 60)}
-SCHEDULERS = ("default", "intBurst")
+SCHEDULERS = ("default", "defaultCwnd", "intBurst")
 METRICS = ['goodput', 'throughput', 'cwnd', 'mbytesInFlight', 'retransmissionRate', 'numRtos', 'holBlockedBytes', 'subflowSendQueueBytes', 'metaReinjectedBytes', 'metaReinjections', 'mpOrbForwardQueueingDelay', 'mpOrbReverseQueueingDelay', 'intSchedulerScore', 'intSchedulerBurstBytes', 'intSchedulerFreshFeedback', 'intSchedulerProbe', 'mpOrbPressureWeight', 'mpOrbPressureSubflowRate', 'mpOrbPressureConnectionRate', 'queueLength']
 
 
@@ -267,7 +267,7 @@ def main():
                 write(f'output-scalar-file = "results/{config}-#0.sca"')
     path = EXPERIMENT_DIR / 'experimentScheduler.ini'
     path.write_text("\n".join(lines) + "\n")
-    print(f"Generated {path}: 20 configurations, {bdp_packets()} packets per queue")
+    print(f"Generated {path}: {len(PROFILES) * len(SCHEDULERS) * len(RUNS)} configurations, {bdp_packets()} packets per queue")
 
 
 if __name__ == '__main__':

@@ -1,7 +1,7 @@
 # MpOrbPressure scheduler comparison
 
-Experiment 4's two-path topology, comparing the foreground connection's `default`
-and `intBurst` schedulers. The algorithm is **MpOrbPressure** (the implemented name
+Experiment 4's two-path topology, comparing the foreground connection's `default`,
+`defaultCwnd` and `intBurst` schedulers. The algorithm is **MpOrbPressure** (the implemented name
 corresponding to “mptcpPressure”). Five single-subflow MpOrbPressure background
 connections compete on path 2. Their scheduler stays `default` in every case.
 
@@ -10,7 +10,7 @@ connections compete on path 2. Their scheduler stays `default` in every case.
 - Two 100 Mbps bottlenecks; independent 10 Gbps access links.
 - RTT profiles: `equal` = 20/20 ms; `longer` = 20/60 ms. These are propagation RTTs;
   serialization and queueing add delay. Background propagation RTT matches path 2.
-- Two foreground schedulers × two RTT profiles × five paired seeds = **20 runs**.
+- Three foreground schedulers × two RTT profiles × five paired seeds = **30 runs**.
 - Foreground starts at the same seeded time in 0.1–2 s for each matched case.
 - 0–40 s: foreground alone. At 40 s, all five background connections start.
 - At 80 s, background **admission** stops; already assigned data may drain.
@@ -66,7 +66,11 @@ Under `simulations/plots/experimentScheduler/`:
 
 - `goodput_comparison.png/pdf`: paired scheduler curves for each RTT profile;
   lines are run means, bands are min/max across available runs.
-- `phase_goodput.png/pdf`: foreground phase means with sample standard deviations.
+- `goodput_mean_variance.png/pdf`: mean goodput with ±1 sample standard deviation
+  bands above; sample variance across runs in Mbps² below, separately for each RTT
+  profile. Variance is undefined for a single run and omitted. Corresponding data
+  are in `goodput_time_statistics.csv`.
+- `phase_goodput.png/pdf`: individual-run points plus phase means with sample standard deviations (no bars).
 - `phase_summary.csv`: per-run, time-weighted foreground/background goodput,
   receiver HoL bytes and total foreground unsent send-queue bytes.
 - `phase_aggregate.csv` and `coverage.csv`: summary statistics and run coverage.
@@ -82,3 +86,18 @@ presenting a complete comparison. Optional unavailable telemetry remains missing
 
 Validation performed: generator/config checks, NED syntax validation, CSV
 extraction and plots using synthetic data only. No simulations or builds run.
+
+## Adding defaultCwnd to existing results
+
+To keep existing default/intBurst results, run only the ten new configurations
+through extraction, then plot all three schedulers:
+
+```sh
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Pressure_equal_defaultCwnd Pressure_longer_defaultCwnd --end-step 3
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --start-step 4 --skip-generate
+```
+
+The completion fingerprint includes the whole INI, so adding configurations can
+invalidate older resume markers. Explicit selection above avoids rerunning the
+previous schedulers. Existing phase plot files are replaced with the new point
+plots when plotting runs; no existing result vectors are edited.
