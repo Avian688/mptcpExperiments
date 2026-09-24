@@ -23,8 +23,7 @@ connections compete on path 2. Their scheduler stays `default` in every case.
 - Alpha parameters are held constant: additive increase 0.05, eta 0.95, alpha 0.03.
 
 The RTT comparison is useful because `intInformed` uses forward-delay estimates.
-This is a comparison of the complete current schedulers, including intInformed's
-unsent-backlog bound, not an isolated measurement of the INT score's benefit.
+This is a comparison of the complete current schedulers, with identical burst-only cwnd caps and write-memory admission for defaultCwnd and intInformed, not an isolated measurement of the INT score's benefit.
 The current starvation threshold comes from the compiled scheduler, not this INI.
 
 **Scheduler configuration belongs on `tcp.conn-*.schedulerMode`.** The generated
