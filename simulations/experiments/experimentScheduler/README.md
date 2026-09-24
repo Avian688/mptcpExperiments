@@ -60,7 +60,7 @@ Raw vec/sca existence alone is insufficient. Filenames retain `-#0`.
 
 ## Outputs
 
-Under `simulations/plots/experimentScheduler/alpha/`:
+Under `simulations/plots/experimentScheduler/`:
 
 - `goodput_comparison.png/pdf`: paired scheduler curves for each RTT profile;
   lines are run means, bands are min/max across available runs.
@@ -72,7 +72,7 @@ Under `simulations/plots/experimentScheduler/alpha/`:
 - `phase_summary.csv`: per-run, time-weighted foreground/background goodput,
   receiver HoL bytes and total foreground unsent send-queue bytes.
 - `phase_aggregate.csv` and `coverage.csv`: summary statistics and run coverage.
-- `<profile>/<scheduler>/runN.png/pdf`: foreground/background goodput, per-subflow
+- `<profile>_<scheduler>_runN.png/pdf`: foreground/background goodput, per-subflow
   cwnd, unsent queue, bytes in flight, receiver HoL and forward queueing delay.
   Subflow labels retain connection IDs; order follows connection creation.
 
@@ -104,8 +104,9 @@ plots when plotting runs; no existing result vectors are edited.
 
 The experiment now uses MpORB Alpha on all connections. Configuration and raw
 result names start with `Alpha_`; extracted CSV folders start with `alpha_`, and
-plots go to `plots/experimentScheduler/alpha/`. Existing Pressure results are
-preserved and are not used by the Alpha plots. All Alpha cases need new runs.
+plots go to `plots/experimentScheduler/`. Existing Pressure simulation results are preserved and are not used by Alpha
+plots. Current summary plots overwrite the main experiment plot filenames; all
+new plot files are written directly in that folder, without iteration subfolders. All Alpha cases need new runs.
 `intInformed` remains the current scheduler name (`intBurst` is a C++ alias).
 
 The unequal-RTT profile is now `reversed` (path 1: 60 ms; competing path 2: 20 ms).

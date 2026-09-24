@@ -12,7 +12,7 @@ from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, config_pre
 
 SIM_ROOT = Path(__file__).resolve().parents[2]
 CSV_ROOT = SIM_ROOT / 'experiments/experimentScheduler/csvs'
-OUT = SIM_ROOT / 'plots/experimentScheduler/alpha'
+OUT = SIM_ROOT / 'plots/experimentScheduler'
 PHASES = {'baseline': (10, 40), 'competition': (40, 80), 'recovery': (80, 120)}
 COLORS = {'default': '#2878b5', 'defaultCwnd': '#31945b', 'intInformed': '#e47722'}
 
@@ -127,7 +127,7 @@ def main():
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend(fontsize=7)
                 fig.suptitle(f'MpORB Alpha — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
-                save(fig, OUT / profile / scheduler / f'run{run}')
+                save(fig, OUT / f'{profile}_{scheduler}_run{run}')
                 for phase, (start, end) in PHASES.items():
                     rows.append(dict(profile=profile, scheduler=scheduler, run=run, phase=phase,
                         start_s=start, end_s=end,
