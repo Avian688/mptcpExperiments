@@ -83,6 +83,7 @@ def main():
     args = parser.parse_args()
     grid = np.arange(0.25, 120, 0.5)
     curves, rows, coverage = {}, [], []
+    cwnd_curves = {}
     missing = []
     for profile in PROFILES:
         for scheduler in SCHEDULERS:
@@ -118,6 +119,9 @@ def main():
                         if path.exists():
                             t, v = read_series(path, metric)
                             ax.step(t, v / scale, where='post', label=f'Subflow {i+1} ({folder.name.split(".")[-1]})', linewidth=0.8)
+                            if metric == 'cwnd' and len(t):
+                                cwnd_curves.setdefault((profile, scheduler, i+1), []).append(
+                                    sample((t, v), grid) / 1024)
                     ax.set_ylabel(label)
                 axes[4].plot(grid, aggregate(hol, grid, 'holBlockedBytes', True) / 1024)
                 axes[4].set_ylabel('Receiver HoL bytes (KiB)')
@@ -192,6 +196,42 @@ def main():
                 ax.legend()
     save(fig, OUT/'goodput_mean_variance')
     pd.DataFrame(stats).to_csv(OUT/'goodput_time_statistics.csv', index=False)
+
+    # Keep subflows separate: summing windows would hide withdrawal on one path.
+    if cwnd_curves:
+        subflow_ids = sorted({key[2] for key in cwnd_curves})
+        fig, axes = plt.subplots(len(PROFILES), len(subflow_ids),
+                                 figsize=(12, 3.5 * len(PROFILES)), squeeze=False)
+        cwnd_stats = []
+        for i, profile in enumerate(PROFILES):
+            for j, subflow in enumerate(subflow_ids):
+                ax = axes[i, j]
+                for scheduler in SCHEDULERS:
+                    series = cwnd_curves.get((profile, scheduler, subflow))
+                    if not series:
+                        continue
+                    values = np.asarray(series)
+                    mean = values.mean(axis=0)
+                    variance = values.var(axis=0, ddof=1) if len(values)>1 else np.full_like(mean, np.nan)
+                    ax.plot(grid, mean, label=scheduler, color=COLORS[scheduler])
+                    if len(values)>1:
+                        std = np.sqrt(variance)
+                        ax.fill_between(grid, mean-std, mean+std, color=COLORS[scheduler], alpha=0.15)
+                    for t, m, v in zip(grid, mean, variance):
+                        cwnd_stats.append(dict(profile=profile, scheduler=scheduler, subflow=subflow,
+                                              time_s=t, mean_kib=m, variance_kib2=v, runs=len(values)))
+                ax.set_title(f'RTT {PROFILES[profile][0]}/{PROFILES[profile][1]} ms — Subflow {subflow}')
+                ax.set_ylabel('Cwnd (KiB)')
+                ax.set_xlabel('Time (s)')
+                decorate(ax)
+                ax.set_ylim(bottom=0)
+                if ax.get_legend_handles_labels()[0]:
+                    ax.legend()
+        fig.suptitle('Cwnd: run mean ± 1 sample standard deviation')
+        save(fig, OUT/'cwnd_comparison')
+        pd.DataFrame(cwnd_stats).to_csv(OUT/'cwnd_time_statistics.csv', index=False)
+    else:
+        print('No subflow cwnd data found; cwnd comparison omitted.')
 
     # Per-run points expose the distribution; larger markers show mean ± SD.
     fig, axes = plt.subplots(len(PROFILES), len(PHASES), figsize=(12, 6), squeeze=False)

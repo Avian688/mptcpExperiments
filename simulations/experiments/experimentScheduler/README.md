@@ -23,7 +23,7 @@ connections compete on path 2. Their scheduler stays `default` in every case.
 - Alpha parameters are held constant: additive increase 0.05, eta 0.95, alpha 0.03.
 
 The RTT comparison is useful because `intInformed` uses forward-delay estimates.
-This is a comparison of the complete current schedulers, with identical burst-only cwnd caps and write-memory admission for defaultCwnd and intInformed, not an isolated measurement of the INT score's benefit.
+This is a comparison of the complete current schedulers, with identical unsent cwnd allowances and write-memory admission for defaultCwnd and intInformed, not an isolated measurement of the INT score's benefit.
 The current starvation threshold comes from the compiled scheduler, not this INI.
 
 **Scheduler configuration belongs on `tcp.conn-*.schedulerMode`.** The generated
@@ -68,6 +68,10 @@ Under `simulations/plots/experimentScheduler/`:
   profile. Variance is undefined for a single run and omitted. Corresponding data
   are in `goodput_time_statistics.csv`.
 - `phase_goodput.png/pdf`: individual-run points plus phase means with sample standard deviations (no bars).
+- `cwnd_comparison.png/pdf`: all three schedulers, with separate panels for each
+  RTT profile and subflow (connection creation order). Lines show the run mean;
+  bands show ±1 sample standard deviation. `cwnd_time_statistics.csv` contains
+  means, sample variances and available run counts. Uses existing cwnd vectors.
 - `phase_summary.csv`: per-run, time-weighted foreground/background goodput,
   receiver HoL bytes and total foreground unsent send-queue bytes.
 - `phase_aggregate.csv` and `coverage.csv`: summary statistics and run coverage.
