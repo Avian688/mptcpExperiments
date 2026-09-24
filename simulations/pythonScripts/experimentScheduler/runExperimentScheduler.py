@@ -300,11 +300,14 @@ def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     csv_path = expected_export(entry)
     csv_path.unlink(missing_ok=True)
     log_path = LOG_DIR / "scavetool" / f"{entry.config}.log"
+    vector = expected_vec(entry)
+    if not vector.exists() and "_intInformed_" in vector.name:
+        vector = vector.with_name(vector.name.replace("_intInformed_", "_intBurst_"))
     command = [
         tool_path("opp_scavetool"), "export",
         "-o", f"results/{entry.config}.csv",
         "-F", "CSV-R",
-        f"results/{entry.config}-#0.vec",
+        str(vector),
     ]
     return_code, _ = run_logged_command(command, EXPERIMENT_DIR, log_path)
     return entry, return_code == 0 and csv_path.exists(), return_code, log_path
@@ -314,10 +317,13 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     out_root = EXPERIMENT_DIR / "csvs" / entry.protocol / f"run{entry.run}"
     shutil.rmtree(out_root, ignore_errors=True)
     log_path = LOG_DIR / "extract" / f"{entry.config}.log"
+    exported = expected_export(entry)
+    if not exported.exists() and "_intInformed_" in exported.name:
+        exported = exported.with_name(exported.name.replace("_intInformed_", "_intBurst_"))
     command = [
         sys.executable,
         str(SCRIPT_DIR / "extractSingleCsvFile.py"),
-        str(expected_export(entry)),
+        str(exported),
         entry.protocol,
         str(entry.run),
     ]

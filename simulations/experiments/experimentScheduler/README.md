@@ -1,14 +1,14 @@
 # MpOrbPressure scheduler comparison
 
 Experiment 4's two-path topology, comparing the foreground connection's `default`,
-`defaultCwnd` and `intBurst` schedulers. The algorithm is **MpOrbPressure** (the implemented name
+`defaultCwnd` and `intInformed` schedulers. The algorithm is **MpOrbPressure** (the implemented name
 corresponding to “mptcpPressure”). Five single-subflow MpOrbPressure background
 connections compete on path 2. Their scheduler stays `default` in every case.
 
 ## Matrix and timing
 
 - Two 100 Mbps bottlenecks; independent 10 Gbps access links.
-- RTT profiles: `equal` = 20/20 ms; `longer` = 20/60 ms. These are propagation RTTs;
+- RTT profiles: `equal` = 20/20 ms; `reversed` = 60/20 ms. These are propagation RTTs;
   serialization and queueing add delay. Background propagation RTT matches path 2.
 - Three foreground schedulers × two RTT profiles × five paired seeds = **30 runs**.
 - Foreground starts at the same seeded time in 0.1–2 s for each matched case.
@@ -17,15 +17,15 @@ connections compete on path 2. Their scheduler stays `default` in every case.
 - Stop at **120 s**, allowing 40 s for recovery.
 - Every queue has **173 packets**: ceil(100 Mbps × 20 ms / (8 × 1448)). Keep this
   fixed across profiles to isolate propagation delay, rather than changing RTT
-  and buffer capacity together. It is not one 60 ms BDP in the longer case.
+  and buffer capacity together. It is not one 60 ms BDP on the 60 ms path.
 - MSS 1448; foreground sendQueueLimit 4 MiB; initial app write 2 GB. The existing
   transport refill mechanism maintains offered load after the write; tClose=-1s.
 - PINT probability 1; separate directional queue delay enabled; fixedAvgRTTVal=0s.
 - Pressure parameters are held constant: decrease gain 1, max decrease fraction
   0.25, probe interval 4 RTTs, additive increase 0.05, eta 0.95, alpha 0.03.
 
-The RTT comparison is useful because `intBurst` uses forward-delay estimates.
-This is a comparison of the complete current schedulers, including intBurst's
+The RTT comparison is useful because `intInformed` uses forward-delay estimates.
+This is a comparison of the complete current schedulers, including intInformed's
 unsent-backlog bound, not an isolated measurement of the INT score's benefit.
 The current starvation threshold comes from the compiled scheduler, not this INI.
 
@@ -45,7 +45,7 @@ python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/r
 A small first check (both schedulers, equal RTT, one seed):
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 2 --runs 1 --configs Pressure_equal_default Pressure_equal_intBurst --retries 0
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 2 --runs 1 --configs Pressure_equal_default Pressure_equal_intInformed --retries 0
 ```
 
 The runner generates INIs, simulates, exports, extracts, then plots. Stages have
@@ -89,11 +89,11 @@ extraction and plots using synthetic data only. No simulations or builds run.
 
 ## Adding defaultCwnd to existing results
 
-To keep existing default/intBurst results, run only the ten new configurations
+To keep existing default/intInformed results, run only the ten new configurations
 through extraction, then plot all three schedulers:
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Pressure_equal_defaultCwnd Pressure_longer_defaultCwnd --end-step 3
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Pressure_equal_defaultCwnd Pressure_reversed_defaultCwnd --end-step 3
 python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --start-step 4 --skip-generate
 ```
 
@@ -101,3 +101,16 @@ The completion fingerprint includes the whole INI, so adding configurations can
 invalidate older resume markers. Explicit selection above avoids rerunning the
 previous schedulers. Existing phase plot files are replaced with the new point
 plots when plotting runs; no existing result vectors are edited.
+
+## Scheduler rename
+
+`intInformed` is the current name of `intBurst`; its algorithm is unchanged by
+this rename. The former mode remains a C++ configuration alias. New runs use
+`Pressure_<profile>_intInformed_RunN`. Replotting uses existing `<profile>_intBurst`
+CSV directories if the new directory is absent, displaying `intInformed`.
+Export/extraction also accept the old result filenames when new ones are absent.
+No result files are renamed or modified by the source update.
+
+The unequal-RTT profile is now `reversed` (path 1: 60 ms; competing path 2: 20 ms).
+Its distinct result names prevent earlier `longer` (20/60 ms) results from being
+reused or plotted under the new RTT labels. The equal case remains 20/20 ms.

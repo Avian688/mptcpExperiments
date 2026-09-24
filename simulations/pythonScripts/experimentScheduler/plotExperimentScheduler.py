@@ -14,7 +14,7 @@ SIM_ROOT = Path(__file__).resolve().parents[2]
 CSV_ROOT = SIM_ROOT / 'experiments/experimentScheduler/csvs'
 OUT = SIM_ROOT / 'plots/experimentScheduler'
 PHASES = {'baseline': (10, 40), 'competition': (40, 80), 'recovery': (80, 120)}
-COLORS = {'default': '#2878b5', 'defaultCwnd': '#31945b', 'intBurst': '#e47722'}
+COLORS = {'default': '#2878b5', 'defaultCwnd': '#31945b', 'intInformed': '#e47722'}
 
 
 def read_series(path, metric):
@@ -91,6 +91,9 @@ def main():
             group = []
             for run in args.runs:
                 root = CSV_ROOT / f'{profile}_{scheduler}' / f'run{run}'
+                # Replot existing results under the new display name without renaming files.
+                if scheduler == 'intInformed' and not root.is_dir():
+                    root = CSV_ROOT / f'{profile}_intBurst' / f'run{run}'
                 main_gp = load(root, 'goodput', 'server[0].app')
                 if not main_gp:
                     missing.append(f'{profile}/{scheduler}/run{run}')
@@ -101,7 +104,7 @@ def main():
                 group.append(aggregate(main_gp, grid, 'goodput') / 1e6)
                 fig, axes = plt.subplots(3, 2, figsize=(12, 10))
                 axes = axes.ravel()
-                axes[0].plot(grid, group[-1], label='Foreground')
+                axes[0].plot(grid, group[-1], label='Goodput')
                 axes[0].plot(grid, aggregate(bg_gp, grid, 'goodput') / 1e6, label='Background total')
                 axes[0].set_ylabel('Goodput (Mbps)')
                 # Identify real subflows by the queue signal; do not include meta cwnd.
@@ -141,7 +144,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(coverage).to_csv(OUT/'coverage.csv', index=False)
     if not rows:
-        raise SystemExit('No extracted foreground goodput found; run stages 1–3 first.')
+        raise SystemExit('No extracted goodput found; run stages 1–3 first.')
     summary = pd.DataFrame(rows)
     summary.to_csv(OUT/'phase_summary.csv', index=False)
     summary.groupby(['profile','scheduler','phase'], sort=False)[[
@@ -156,7 +159,7 @@ def main():
             ax.plot(grid, values.mean(axis=0), label=scheduler, color=COLORS[scheduler])
             ax.fill_between(grid, values.min(axis=0), values.max(axis=0), alpha=0.15, color=COLORS[scheduler])
         ax.set_title(f'RTT {PROFILES[profile][0]}/{PROFILES[profile][1]} ms')
-        ax.set_ylabel('Foreground goodput (Mbps)')
+        ax.set_ylabel('Goodput (Mbps)')
         decorate(ax)
         ax.legend()
     axes[-1,0].set_xlabel('Time (s); line = run mean, shading = run range')

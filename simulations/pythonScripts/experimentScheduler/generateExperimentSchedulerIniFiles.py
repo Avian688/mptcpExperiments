@@ -214,8 +214,8 @@ def write_common_general(write) -> None:
         write(line)
 
 
-PROFILES = {"equal": (20, 20), "longer": (20, 60)}
-SCHEDULERS = ("default", "defaultCwnd", "intBurst")
+PROFILES = {"equal": (20, 20), "reversed": (60, 20)}
+SCHEDULERS = ("default", "defaultCwnd", "intInformed")
 METRICS = ['goodput', 'throughput', 'cwnd', 'mbytesInFlight', 'retransmissionRate', 'numRtos', 'holBlockedBytes', 'subflowSendQueueBytes', 'metaReinjectedBytes', 'metaReinjections', 'mpOrbForwardQueueingDelay', 'mpOrbReverseQueueingDelay', 'intSchedulerScore', 'intSchedulerBurstBytes', 'intSchedulerFreshFeedback', 'intSchedulerProbe', 'mpOrbPressureWeight', 'mpOrbPressureSubflowRate', 'mpOrbPressureConnectionRate', 'queueLength']
 
 
