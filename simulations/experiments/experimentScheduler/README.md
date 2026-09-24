@@ -1,8 +1,7 @@
-# MpOrbPressure scheduler comparison
+# MpOrbSemiCoupledAlpha scheduler comparison
 
 Experiment 4's two-path topology, comparing the foreground connection's `default`,
-`defaultCwnd` and `intInformed` schedulers. The algorithm is **MpOrbPressure** (the implemented name
-corresponding to “mptcpPressure”). Five single-subflow MpOrbPressure background
+`defaultCwnd` and `intInformed` schedulers. The algorithm is **MpOrbSemiCoupledAlpha**. Five single-subflow MpOrbSemiCoupledAlpha background
 connections compete on path 2. Their scheduler stays `default` in every case.
 
 ## Matrix and timing
@@ -21,8 +20,7 @@ connections compete on path 2. Their scheduler stays `default` in every case.
 - MSS 1448; foreground sendQueueLimit 4 MiB; initial app write 2 GB. The existing
   transport refill mechanism maintains offered load after the write; tClose=-1s.
 - PINT probability 1; separate directional queue delay enabled; fixedAvgRTTVal=0s.
-- Pressure parameters are held constant: decrease gain 1, max decrease fraction
-  0.25, probe interval 4 RTTs, additive increase 0.05, eta 0.95, alpha 0.03.
+- Alpha parameters are held constant: additive increase 0.05, eta 0.95, alpha 0.03.
 
 The RTT comparison is useful because `intInformed` uses forward-delay estimates.
 This is a comparison of the complete current schedulers, including intInformed's
@@ -45,7 +43,7 @@ python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/r
 A small first check (both schedulers, equal RTT, one seed):
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 2 --runs 1 --configs Pressure_equal_default Pressure_equal_intInformed --retries 0
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 2 --runs 1 --configs Alpha_equal_default Alpha_equal_intInformed --retries 0
 ```
 
 The runner generates INIs, simulates, exports, extracts, then plots. Stages have
@@ -62,7 +60,7 @@ Raw vec/sca existence alone is insufficient. Filenames retain `-#0`.
 
 ## Outputs
 
-Under `simulations/plots/experimentScheduler/`:
+Under `simulations/plots/experimentScheduler/alpha/`:
 
 - `goodput_comparison.png/pdf`: paired scheduler curves for each RTT profile;
   lines are run means, bands are min/max across available runs.
@@ -93,7 +91,7 @@ To keep existing default/intInformed results, run only the ten new configuration
 through extraction, then plot all three schedulers:
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Pressure_equal_defaultCwnd Pressure_reversed_defaultCwnd --end-step 3
+python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Alpha_equal_defaultCwnd Alpha_reversed_defaultCwnd --end-step 3
 python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --start-step 4 --skip-generate
 ```
 
@@ -102,14 +100,13 @@ invalidate older resume markers. Explicit selection above avoids rerunning the
 previous schedulers. Existing phase plot files are replaced with the new point
 plots when plotting runs; no existing result vectors are edited.
 
-## Scheduler rename
+## Algorithm and result separation
 
-`intInformed` is the current name of `intBurst`; its algorithm is unchanged by
-this rename. The former mode remains a C++ configuration alias. New runs use
-`Pressure_<profile>_intInformed_RunN`. Replotting uses existing `<profile>_intBurst`
-CSV directories if the new directory is absent, displaying `intInformed`.
-Export/extraction also accept the old result filenames when new ones are absent.
-No result files are renamed or modified by the source update.
+The experiment now uses MpORB Alpha on all connections. Configuration and raw
+result names start with `Alpha_`; extracted CSV folders start with `alpha_`, and
+plots go to `plots/experimentScheduler/alpha/`. Existing Pressure results are
+preserved and are not used by the Alpha plots. All Alpha cases need new runs.
+`intInformed` remains the current scheduler name (`intBurst` is a C++ alias).
 
 The unequal-RTT profile is now `reversed` (path 1: 60 ms; competing path 2: 20 ms).
 Its distinct result names prevent earlier `longer` (20/60 ms) results from being

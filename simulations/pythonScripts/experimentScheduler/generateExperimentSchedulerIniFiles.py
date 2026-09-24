@@ -188,15 +188,6 @@ def write_common_general(write) -> None:
         "**.intSchedulerProbe.statistic-recording = true",
         "**.intSchedulerProbe:vector(removeRepeats).vector-recording = true",
         "**.intSchedulerProbe.result-recording-modes = vector(removeRepeats)",
-        "**.mpOrbPressureWeight.statistic-recording = true",
-        "**.mpOrbPressureWeight:vector(removeRepeats).vector-recording = true",
-        "**.mpOrbPressureWeight.result-recording-modes = vector(removeRepeats)",
-        "**.mpOrbPressureSubflowRate.statistic-recording = true",
-        "**.mpOrbPressureSubflowRate:vector(removeRepeats).vector-recording = true",
-        "**.mpOrbPressureSubflowRate.result-recording-modes = vector(removeRepeats)",
-        "**.mpOrbPressureConnectionRate.statistic-recording = true",
-        "**.mpOrbPressureConnectionRate:vector(removeRepeats).vector-recording = true",
-        "**.mpOrbPressureConnectionRate.result-recording-modes = vector(removeRepeats)",
         "**.queueLength.statistic-recording = true",
         "**.queueLength:vector(removeRepeats).vector-recording = true",
         "**.queueLength.result-recording-modes = vector(removeRepeats)",
@@ -216,11 +207,11 @@ def write_common_general(write) -> None:
 
 PROFILES = {"equal": (20, 20), "reversed": (60, 20)}
 SCHEDULERS = ("default", "defaultCwnd", "intInformed")
-METRICS = ['goodput', 'throughput', 'cwnd', 'mbytesInFlight', 'retransmissionRate', 'numRtos', 'holBlockedBytes', 'subflowSendQueueBytes', 'metaReinjectedBytes', 'metaReinjections', 'mpOrbForwardQueueingDelay', 'mpOrbReverseQueueingDelay', 'intSchedulerScore', 'intSchedulerBurstBytes', 'intSchedulerFreshFeedback', 'intSchedulerProbe', 'mpOrbPressureWeight', 'mpOrbPressureSubflowRate', 'mpOrbPressureConnectionRate', 'queueLength']
+METRICS = ['goodput', 'throughput', 'cwnd', 'mbytesInFlight', 'retransmissionRate', 'numRtos', 'holBlockedBytes', 'subflowSendQueueBytes', 'metaReinjectedBytes', 'metaReinjections', 'mpOrbForwardQueueingDelay', 'mpOrbReverseQueueingDelay', 'intSchedulerScore', 'intSchedulerBurstBytes', 'intSchedulerFreshFeedback', 'intSchedulerProbe', 'queueLength']
 
 
 def config_prefix(profile, scheduler):
-    return f"Pressure_{profile}_{scheduler}"
+    return f"Alpha_{profile}_{scheduler}"
 
 
 def main():
@@ -230,7 +221,7 @@ def main():
     write_common_general(write)
     write('# Fixed 173-packet queues: one 100 Mbps / 20 ms BDP in both RTT profiles.')
     write('**.tcp.typename = "MpOrb"')
-    write('**.tcp.tcpAlgorithmClass = "MpOrbPressure"')
+    write('**.tcp.tcpAlgorithmClass = "MpOrbSemiCoupledAlpha"')
     write('*.backgroundClient[*].tcp.conn-*.schedulerMode = "default"')
     write('*.backgroundServer[*].tcp.conn-*.schedulerMode = "default"')
     write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
@@ -243,16 +234,13 @@ def main():
     write('**.fixedAvgRTTVal = 0s')
     write('**.pintFeedbackProbability = 1')
     write('**.pintSeparateQueueingDelay = true')
-    write('**.mpOrbPressureDecreaseGain = 1')
-    write('**.mpOrbPressureMaxDecreaseFraction = 0.25')
-    write('**.mpOrbPressureProbeIntervalRtts = 4')
     for profile, (rtt1, rtt2) in PROFILES.items():
         for scheduler in SCHEDULERS:
             for run in RUNS:
                 config = f"{config_prefix(profile, scheduler)}_Run{run}"
                 write()
                 write(f'[Config {config}]')
-                write(f'description = "MpOrbPressure; {scheduler}; RTT {rtt1}/{rtt2} ms; run {run}"')
+                write(f'description = "MpOrbSemiCoupledAlpha; {scheduler}; RTT {rtt1}/{rtt2} ms; run {run}"')
                 write(f'seed-set = {run}')
                 write(f'*.path1Rtt = {rtt1}ms')
                 write(f'*.path2Rtt = {rtt2}ms')

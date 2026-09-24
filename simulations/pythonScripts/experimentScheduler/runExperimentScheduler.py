@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, config_prefix
-CONFIGS = [(config_prefix(p, s), f"{p}_{s}", "experimentScheduler.ini")
+CONFIGS = [(config_prefix(p, s), f"alpha_{p}_{s}", "experimentScheduler.ini")
            for p in PROFILES for s in SCHEDULERS]
 DEFAULT_RUNS = 5
 

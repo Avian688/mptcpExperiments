@@ -12,7 +12,7 @@ from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, config_pre
 
 SIM_ROOT = Path(__file__).resolve().parents[2]
 CSV_ROOT = SIM_ROOT / 'experiments/experimentScheduler/csvs'
-OUT = SIM_ROOT / 'plots/experimentScheduler'
+OUT = SIM_ROOT / 'plots/experimentScheduler/alpha'
 PHASES = {'baseline': (10, 40), 'competition': (40, 80), 'recovery': (80, 120)}
 COLORS = {'default': '#2878b5', 'defaultCwnd': '#31945b', 'intInformed': '#e47722'}
 
@@ -90,10 +90,7 @@ def main():
                 continue
             group = []
             for run in args.runs:
-                root = CSV_ROOT / f'{profile}_{scheduler}' / f'run{run}'
-                # Replot existing results under the new display name without renaming files.
-                if scheduler == 'intInformed' and not root.is_dir():
-                    root = CSV_ROOT / f'{profile}_intBurst' / f'run{run}'
+                root = CSV_ROOT / f'alpha_{profile}_{scheduler}' / f'run{run}'
                 main_gp = load(root, 'goodput', 'server[0].app')
                 if not main_gp:
                     missing.append(f'{profile}/{scheduler}/run{run}')
@@ -129,7 +126,7 @@ def main():
                     ax.set_xlabel('Time (s)')
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend(fontsize=7)
-                fig.suptitle(f'MpOrbPressure — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
+                fig.suptitle(f'MpORB Alpha — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
                 save(fig, OUT / profile / scheduler / f'run{run}')
                 for phase, (start, end) in PHASES.items():
                     rows.append(dict(profile=profile, scheduler=scheduler, run=run, phase=phase,
