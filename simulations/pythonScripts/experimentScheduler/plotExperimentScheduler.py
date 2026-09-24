@@ -127,7 +127,8 @@ def main():
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend(fontsize=7)
                 fig.suptitle(f'MpORB Alpha — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
-                save(fig, OUT / f'{profile}_{scheduler}_run{run}')
+                rtt1, rtt2 = PROFILES[profile]
+                save(fig, OUT / f'rtt_{rtt1}ms_{rtt2}ms' / scheduler / f'run{run}')
                 for phase, (start, end) in PHASES.items():
                     rows.append(dict(profile=profile, scheduler=scheduler, run=run, phase=phase,
                         start_s=start, end_s=end,
