@@ -468,6 +468,7 @@ def main() -> int:
             command = [
                 sys.executable,
                 str(SCRIPT_DIR / "plotExperiment4.py"),
+                "--clean",
                 "--protocols",
                 *sorted({entry.protocol for entry in selected}),
                 "--runs",

@@ -109,7 +109,7 @@ for n in 4 5 6; do python3 samples/mptcpExperiments/simulations/pythonScripts/ex
 
 `--skip-generate` uses the checked-in INIs. Experiment 4's Alpha/Beta INIs and
 scenario have been restored to the generated baseline: 150 s duration,
-30–60/90–120 s background schedule, `default` scheduler and selected vector
+30–60/90–120 s background schedule, `defaultCwnd` scheduler and selected vector
 recording. Beta matches Alpha's setup. Link capacities remain specified in NED.
 Experiments 5/6 generate both algorithms when regeneration is requested.
 Their Alpha results keep existing paths; Beta uses separate `beta_...` case

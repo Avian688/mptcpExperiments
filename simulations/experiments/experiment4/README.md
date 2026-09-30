@@ -1,9 +1,9 @@
-> Alpha/Beta INIs and `conditions.xml` are restored to the generated defaults:
-> 150 s, background waves at 30–60 s and 90–120 s, the `default` scheduler,
+> Alpha/Beta INIs and `conditions.xml` use the restored timing:
+> 150 s, background waves at 30–60 s and 90–120 s, the `defaultCwnd` scheduler,
 > and selected vectors only. Both algorithms are runner defaults (five runs each).
 > Plots read phase boundaries and duration from the selected INIs and scenario XML.
-> The separately edited NED currently specifies 50 Mbps bottlenecks; restoring
-> the INIs/scenario does not change that topology capacity.
+> All experiment 4 protocols and background connections use `defaultCwnd`;
+> the generator preserves this choice. The NED bottlenecks are back at 100 Mbps.
 
 # Experiment 4: shared paths with temporary MPORB competition
 
@@ -79,6 +79,16 @@ Plots and phase summaries require the complete 150 s experiment. If using
 experiment before plotting.
 
 ## Results
+
+The runner clears previous experiment 4 plot outputs before plotting. To rebuild
+only the plots from extracted CSVs, without rerunning simulations or extraction:
+
+```sh
+python3 samples/mptcpExperiments/simulations/pythonScripts/experiment4/plotExperiment4.py --clean
+```
+
+This removes the chosen plot output directory, including stale figures and plot
+summaries. Raw simulation results and extracted input CSVs are retained.
 
 Raw results and completion markers are in this directory's `results/`;
 extracted metrics are in `csvs/<protocol>/runN/`. Logs are in

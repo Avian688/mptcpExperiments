@@ -3,6 +3,7 @@
 from pathlib import Path
 import argparse
 import configparser
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 import matplotlib
@@ -14,7 +15,7 @@ import pandas as pd
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'experiment2'))
 from plotExperiment2 import (PROTOCOLS, USERS, USER_PATH_IDS, load_bundle, read_series, resample)
-from generateExperiment4IniFiles import WAVES
+from generateExperiment4IniFiles import WAVES, PATH_MBPS
 
 PHASES = ((0, 30, 'Initial'), (30, 60, 'Load P5/P6'), (60, 90, 'Recovery 1'),
           (90, 120, 'Load P1/P2'), (120, 150, 'Recovery 2'))
@@ -171,8 +172,21 @@ def main():
     parser.add_argument('--protocols', nargs='+', default=['mporb_semicoupled_alpha', 'mporb_semicoupled_beta'])
     parser.add_argument('--csv-root', type=Path, default=HERE.parents[1]/'experiments/experiment4/csvs')
     parser.add_argument('--out-dir', type=Path, default=HERE.parents[1]/'plots/experiment4')
+    parser.add_argument('--clean', action='store_true', help='Remove previous plot outputs before regenerating; keeps simulation results and extracted CSVs.')
     args = parser.parse_args()
     configure_schedule(args.protocols)
+    if args.clean:
+        # Only the generated plot directory may be cleared, never its parents
+        # or the input tree, even when custom paths are supplied.
+        output = args.out_dir.resolve()
+        inputs = args.csv_root.resolve()
+        if (output == inputs or output in inputs.parents or inputs in output.parents or
+                output == HERE.parents[1] or output in HERE.parents[1].parents):
+            parser.error('--out-dir must be a separate plot directory when using --clean')
+        if args.out_dir.is_symlink():
+            parser.error('--clean does not follow a symlinked output directory')
+        if args.out_dir.exists():
+            shutil.rmtree(args.out_dir)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for protocol, label in PROTOCOLS + [('cubic', 'CUBIC Uncoupled')]:

@@ -29,6 +29,45 @@ def parse_ini(path):
 
 
 class AlphaExperiments(unittest.TestCase):
+    def test_experiment4_full_plot_path_and_plot_only_cleanup(self):
+        script = ROOT / 'simulations/pythonScripts/experiment4'
+        with patch.object(sys, 'path', [str(script), *sys.path]):
+            import plotExperiment4 as exp4
+        from plotExperiment2 import PATH_QUEUE_MODULES
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            inputs, output = root/'csvs', root/'plots'
+            times = np.arange(.5, 150.5, .5)
+            def write(run_root, module, metric, value):
+                folder = run_root/module
+                folder.mkdir(parents=True, exist_ok=True)
+                pd.DataFrame({'time': times, metric: value}).to_csv(folder/f'{metric}.csv', index=False)
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_semicoupled_beta'):
+                run_root = inputs/protocol/'run1'
+                for i in range(3):
+                    write(run_root, f'sharedleopaths.server[{i}].app[0]', 'goodput', 200e6)
+                    for subflow in range(4):
+                        write(run_root, f'sharedleopaths.server[{i}].tcp.conn-{subflow}', 'throughput', 50e6)
+                        write(run_root, f'sharedleopaths.client[{i}].tcp.conn-{subflow}', 'cwnd', 250000.)
+                for module in PATH_QUEUE_MODULES.values():
+                    write(run_root, module, 'queueLength', 2.)
+                for i in range(20):
+                    write(run_root, f'sharedleopaths.backgroundServer[{i}].app[0]', 'goodput', 10e6)
+            sentinel = inputs/'keep.txt'
+            sentinel.write_text('Keep extracted inputs')
+            stale = output/'old_protocol'/'old.png'
+            stale.parent.mkdir(parents=True)
+            stale.write_bytes(b'old plot')
+            with patch.object(sys, 'argv', ['plot', '--runs', '1', '--clean', '--csv-root', str(inputs),
+                                           '--out-dir', str(output)]):
+                self.assertEqual(exp4.main(), 0)
+            self.assertFalse(stale.exists())
+            self.assertTrue(sentinel.exists())
+            for name in ('phase_goodput.png', 'phase_goodput.pdf', 'phase_runs.csv', 'phase_summary.csv'):
+                self.assertGreater((output/name).stat().st_size, 0)
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_semicoupled_beta'):
+                self.assertTrue((output/'individual'/protocol/'run1'/'response.png').is_file())
+
     def test_alpha_beta_pairing_and_separate_outputs(self):
         for number, count in ((5, 10), (6, 30)):
             definitions = spec.cases(number)

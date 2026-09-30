@@ -67,6 +67,8 @@ def main():
     for i, line in enumerate(general):
         if line.startswith('**.ppp[*].queue.packetCapacity ='):
             general[i] = f'**.ppp[*].queue.packetCapacity = {bdp_packets()}'
+        elif line.startswith('**.schedulerMode ='):
+            general[i] = '**.schedulerMode = "defaultCwnd"'
         elif line.startswith('# All eight paths are'):
             general[i] = f'# All eight paths are {PATH_RTT_MS} ms / {PATH_MBPS} Mbps with one-BDP ({bdp_packets()} packet) queues.'
         elif line.startswith('# Enter congestion avoidance at'):
