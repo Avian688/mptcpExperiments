@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import configparser
+import hashlib
+import json
 import os
-import shutil
 import signal
+import shutil
 import subprocess
 import sys
 import threading
@@ -15,15 +18,20 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [
+    ("CubicUncoupled", "cubic", "experiment4_cubic.ini"),
+    ("MpOrbUncoupled", "mporb", "experiment4_mporb.ini"),
+    ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment4_mporb_semicoupled_alpha.ini"),
+    ("MpOrbOlia", "mporb_olia", "experiment4_mporb_olia.ini"),
+    ("MpOrbSemiCoupledBeta", "mporb_semicoupled_beta", "experiment4_mporb_semicoupled_beta.ini"),
+    ("MpOrbSemiCoupledEpsilon", "mporb_semicoupled_epsilon", "experiment4_mporb_semicoupled_epsilon.ini"),
+    ("MpOrbSemiCoupledTheta", "mporb_semicoupled_theta", "experiment4_mporb_semicoupled_theta.ini"),
     ("LiaCoupled", "lia", "experiment4_lia.ini"),
     ("OliaCoupled", "olia", "experiment4_olia.ini"),
     ("BaliaCoupled", "balia", "experiment4_balia.ini"),
-    ("MpOrbUncoupled", "mporb", "experiment4_mporb.ini"),
-    ("MpOrbAlpha", "mporb_alpha", "experiment4_mporb_alpha.ini"),
-    ("MpOrbOlia", "mporb_olia", "experiment4_mporb_olia.ini"),
-    ("MpOrbBeta", "mporb_beta", "experiment4_mporb_beta.ini"),
-    ("MpOrbEpsilon", "mporb_epsilon", "experiment4_mporb_epsilon.ini"),
-    ("MpOrbTheta", "mporb_theta", "experiment4_mporb_theta.ini"),
+]
+DEFAULT_CONFIGS = [
+    "MpOrbSemiCoupledAlpha",
+    "MpOrbSemiCoupledBeta",
 ]
 DEFAULT_RUNS = 5
 
@@ -33,7 +41,7 @@ class Entry:
     config_prefix: str
     protocol: str
     ini_file: str
-    run: int
+    run: int = 1
 
     @property
     def config(self) -> str:
@@ -53,10 +61,13 @@ ACTIVE_PROCESSES_LOCK = threading.Lock()
 
 
 def tool_path(name: str) -> str:
-    if os.environ.get(name.upper()):
-        return os.environ[name.upper()]
+    env_name = name.upper()
+    if os.environ.get(env_name):
+        return os.environ[env_name]
     bundled = REPO_ROOT / "bin" / name
-    return str(bundled) if bundled.exists() else name
+    if bundled.exists():
+        return str(bundled)
+    return name
 
 
 def parse_args() -> argparse.Namespace:
@@ -72,26 +83,30 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sim-time-limit", help="Optional OMNeT++ sim-time-limit override, e.g. 5s.")
     parser.add_argument("--start-step", type=int, default=1, help="1=simulate, 2=export, 3=extract, 4=plot")
     parser.add_argument("--end-step", type=int, default=4)
-    parser.add_argument("--resume", action="store_true")
-    parser.add_argument("--clean", action="store_true")
-    parser.add_argument("--skip-generate", action="store_true")
-    parser.add_argument("--configs", nargs="*", default=[item[0] for item in CONFIGS])
+    parser.add_argument("--resume", action="store_true", help="Skip successful simulations with matching completion markers.")
+    parser.add_argument("--clean", action="store_true", help="Remove experiment4 results/csvs/plots before running.")
+    parser.add_argument("--dry-run", action="store_true", help="Generate and list commands without simulating.")
+    parser.add_argument("--skip-generate", action="store_true", help="Do not refresh generated INI inputs first.")
+    parser.add_argument("--configs", nargs="*", default=DEFAULT_CONFIGS)
     parser.add_argument("--runs", type=int, default=int(os.environ.get("EXPERIMENT_RUNS", str(DEFAULT_RUNS))))
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not 1 <= args.runs <= 5 or args.cores < 1 or args.retries < 0:
+        parser.error("Use 1–5 runs, positive cores, and nonnegative retries")
+    if not 1 <= args.start_step <= args.end_step <= 4:
+        parser.error("Steps must satisfy 1 <= start <= end <= 4")
+    unknown = set(args.configs) - {c[0] for c in CONFIGS}
+    if unknown:
+        parser.error(f"Unknown configurations: {sorted(unknown)}")
+    return args
 
 
 def enabled(step: int, args: argparse.Namespace) -> bool:
     return args.start_step <= step <= args.end_step
 
 
-def selected_entries(args: argparse.Namespace) -> list[Entry]:
+def entries(args: argparse.Namespace) -> list[Entry]:
     wanted = set(args.configs)
-    return [
-        Entry(*item, run)
-        for item in CONFIGS
-        if item[0] in wanted
-        for run in range(1, args.runs + 1)
-    ]
+    return [Entry(*item, run=run) for item in CONFIGS if item[0] in wanted for run in range(1, args.runs + 1)]
 
 
 def common_ned_path() -> str:
@@ -146,26 +161,31 @@ def expected_export(entry: Entry) -> Path:
 
 
 def clean_entry(entry: Entry) -> None:
-    for suffix in ("-#0.vec", "-#0.vci", "-#0.sca", ".csv"):
+    for suffix in ("-#0.vec", "-#0.vci", "-#0.sca", ".csv", ".complete.json"):
         (RESULTS_DIR / f"{entry.config}{suffix}").unlink(missing_ok=True)
 
 
 def simulation_command(entry: Entry, args: argparse.Namespace) -> list[str]:
-    command = [
+    cmd = [
         tool_path("opp_run"),
-        "-r", "0",
+        "-r",
+        "0",
         "-m",
-        "-u", "Cmdenv",
-        "-f", entry.ini_file,
-        "-c", entry.config,
-        "-n", common_ned_path(),
+        "-u",
+        "Cmdenv",
+        "-f",
+        entry.ini_file,
+        "-c",
+        entry.config,
+        "-n",
+        common_ned_path(),
         f"--image-path={SAMPLES_ROOT / 'inet4.5' / 'images'}",
     ]
-    for library in load_libs():
-        command.extend(["-l", library])
+    for lib in load_libs():
+        cmd.extend(["-l", lib])
     if args.sim_time_limit:
-        command.append(f"--sim-time-limit={args.sim_time_limit}")
-    return command
+        cmd.append(f"--sim-time-limit={args.sim_time_limit}")
+    return cmd
 
 
 def terminate_process_group(process: subprocess.Popen) -> None:
@@ -189,6 +209,16 @@ def terminate_process_group(process: subprocess.Popen) -> None:
         process.wait()
 
 
+def register_process(process: subprocess.Popen) -> None:
+    with ACTIVE_PROCESSES_LOCK:
+        ACTIVE_PROCESSES.add(process)
+
+
+def unregister_process(process: subprocess.Popen) -> None:
+    with ACTIVE_PROCESSES_LOCK:
+        ACTIVE_PROCESSES.discard(process)
+
+
 def terminate_all_active_processes() -> None:
     with ACTIVE_PROCESSES_LOCK:
         processes = list(ACTIVE_PROCESSES)
@@ -202,7 +232,10 @@ def handle_termination_signal(signum, _frame) -> None:
 
 
 def run_logged_command(
-    command: list[str], cwd: Path, log_path: Path, timeout_seconds: float | None = None
+    command: list[str],
+    cwd: Path,
+    log_path: Path,
+    timeout_seconds: float | None = None,
 ) -> tuple[int, bool]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
@@ -217,8 +250,7 @@ def run_logged_command(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        with ACTIVE_PROCESSES_LOCK:
-            ACTIVE_PROCESSES.add(process)
+        register_process(process)
         try:
             return_code = process.wait(timeout=timeout_seconds)
         except subprocess.TimeoutExpired:
@@ -227,14 +259,18 @@ def run_logged_command(
             return_code = process.returncode if process.returncode is not None else 124
         except BaseException:
             terminate_process_group(process)
+            elapsed = time.monotonic() - started
+            log.write(f"\nInterrupted after {elapsed:.2f} seconds; terminated child process group\n")
+            log.flush()
             raise
         finally:
-            with ACTIVE_PROCESSES_LOCK:
-                ACTIVE_PROCESSES.discard(process)
+            unregister_process(process)
+
         elapsed = time.monotonic() - started
         if timed_out:
             log.write(f"\nTimed out after {elapsed:.2f} seconds\n")
-        log.write(f"\nExit code: {return_code}\nElapsed seconds: {elapsed:.2f}\n")
+        log.write(f"\nExit code: {return_code}\n")
+        log.write(f"Elapsed seconds: {elapsed:.2f}\n")
     return return_code, timed_out
 
 
@@ -245,6 +281,14 @@ def run_checked(command: list[str], cwd: Path, description: str) -> None:
         raise RuntimeError(f"{description} failed with exit code {result.returncode}")
 
 
+def generate_inputs() -> None:
+    run_checked(
+        [sys.executable, "generateExperiment4IniFiles.py"],
+        SCRIPT_DIR,
+        "Generating experiment 4 ini files",
+    )
+
+
 def nonempty(path: Path) -> bool:
     return path.exists() and path.stat().st_size > 0
 
@@ -253,36 +297,50 @@ def simulation_outputs_exist(entry: Entry) -> bool:
     return nonempty(expected_vec(entry)) and nonempty(expected_sca(entry))
 
 
-def reached_time_limit(log_path: Path) -> bool:
-    if not log_path.exists():
-        return False
-    text = log_path.read_text(encoding="utf-8", errors="replace")
-    return "Simulation time limit reached" in text and "Calling finish() at end of Run" in text
+def completion_path(entry):
+    return RESULTS_DIR / f"{entry.config}.complete.json"
 
 
-def teardown_abort_with_results(return_code: int, log_path: Path) -> bool:
-    if return_code not in {-6, 134} or not log_path.exists():
+def input_fingerprint(entry, args):
+    h = hashlib.sha256(json.dumps(simulation_command(entry, args)).encode())
+    for path in (EXPERIMENT_DIR / entry.ini_file, EXPERIMENT_DIR / 'sharedleopaths.ned', EXPERIMENT_DIR / 'conditions.xml'):
+        h.update(path.read_bytes())
+    for lib in load_libs():
+        stem = Path(lib)
+        for path in sorted(stem.parent.glob(f'lib{stem.name}.*')):
+            if path.suffix in ('.dylib', '.so'):
+                h.update(str((path, path.stat().st_size, path.stat().st_mtime_ns)).encode())
+    return h.hexdigest()
+
+
+def output_metadata(entry):
+    return {p.name: [p.stat().st_size, p.stat().st_mtime_ns]
+            for p in (expected_vec(entry), expected_sca(entry)) if nonempty(p)}
+
+
+def completed(entry, fingerprint):
+    try:
+        marker = json.loads(completion_path(entry).read_text())
+    except (OSError, ValueError):
         return False
-    text = log_path.read_text(encoding="utf-8", errors="replace")
-    finished = "\nEnd.\n" in text or text.rstrip().endswith("End.")
-    return finished and ("cSimulation::deleteNetwork" in text or "doDeleteModule" in text)
+    return (marker.get('fingerprint') == fingerprint and simulation_outputs_exist(entry)
+            and marker.get('outputs') == output_metadata(entry))
 
 
 def run_simulation(entry: Entry, args: argparse.Namespace) -> tuple[Entry, bool, int, Path]:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    if args.resume and simulation_outputs_exist(entry):
+    fingerprint = input_fingerprint(entry, args)
+    if args.resume and completed(entry, fingerprint):
         return entry, True, 0, Path()
     clean_entry(entry)
+
     log_path = LOG_DIR / "simulations" / f"{entry.config}.log"
-    return_code, timed_out = run_logged_command(
-        simulation_command(entry, args), EXPERIMENT_DIR, log_path, args.sim_timeout_seconds
-    )
+    command = simulation_command(entry, args)
+    return_code, timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path, args.sim_timeout_seconds)
     outputs_ok = simulation_outputs_exist(entry)
-    ok = outputs_ok and (return_code == 0 or reached_time_limit(log_path))
-    if not ok and not timed_out and outputs_ok and teardown_abort_with_results(return_code, log_path):
-        with log_path.open("a", encoding="utf-8") as log:
-            log.write("\nRunner note: accepted teardown abort because End. and result files are present.\n")
-        ok = True
+    ok = outputs_ok and return_code == 0
+    if ok:
+        completion_path(entry).write_text(json.dumps(dict(fingerprint=fingerprint, outputs=output_metadata(entry)), indent=2))
     return entry, ok, return_code, log_path
 
 
@@ -291,12 +349,15 @@ def export_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     csv_path.unlink(missing_ok=True)
     log_path = LOG_DIR / "scavetool" / f"{entry.config}.log"
     command = [
-        tool_path("opp_scavetool"), "export",
-        "-o", f"results/{entry.config}.csv",
-        "-F", "CSV-R",
+        tool_path("opp_scavetool"),
+        "export",
+        "-o",
+        f"results/{entry.config}.csv",
+        "-F",
+        "CSV-R",
         f"results/{entry.config}-#0.vec",
     ]
-    return_code, _ = run_logged_command(command, EXPERIMENT_DIR, log_path)
+    return_code, _timed_out = run_logged_command(command, EXPERIMENT_DIR, log_path)
     return entry, return_code == 0 and csv_path.exists(), return_code, log_path
 
 
@@ -311,18 +372,20 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
         entry.protocol,
         str(entry.run),
     ]
-    return_code, _ = run_logged_command(command, SCRIPT_DIR, log_path)
+    return_code, _timed_out = run_logged_command(command, SCRIPT_DIR, log_path)
     ok = return_code == 0 and out_root.is_dir() and any(out_root.rglob("*.csv"))
     return entry, ok, return_code, log_path
 
 
-def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespace) -> None:
-    pending = list(entries)
+def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Namespace) -> None:
+    pending = list(work_entries)
+    attempts = args.retries + 1
     failure_lines: list[str] = []
-    for attempt in range(1, args.retries + 2):
+    for attempt in range(1, attempts + 1):
         if not pending:
             return
-        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{args.retries + 1}, {args.cores} core(s)")
+
+        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{attempts}, {args.cores} core(s)")
         failures: list[Entry] = []
         failure_lines = []
         executor = ThreadPoolExecutor(max_workers=args.cores)
@@ -336,9 +399,9 @@ def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespac
                     print(f"  ok: {entry.config}")
                 else:
                     failures.append(entry)
-                    detail = f"{entry.config} (exit {code}, log: {log_path})"
-                    failure_lines.append(detail)
-                    print(f"  failed: {detail}")
+                    line = f"{entry.config} (exit {code}, log: {log_path})"
+                    failure_lines.append(line)
+                    print(f"  failed: {line}")
         except KeyboardInterrupt:
             interrupted = True
             for future in futures:
@@ -349,9 +412,11 @@ def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespac
         finally:
             if not interrupted:
                 executor.shutdown(wait=True)
+
         pending = failures
-        if pending and attempt <= args.retries:
-            print(f"Retrying {len(pending)} failed task(s).")
+        if pending and attempt < attempts:
+            print(f"\nRetrying {len(pending)} failed/missing task(s).\n")
+
     if pending:
         raise RuntimeError(label + " failed:\n  " + "\n  ".join(failure_lines))
 
@@ -361,38 +426,61 @@ def main() -> int:
     args = parse_args()
     try:
         if not args.skip_generate:
-            run_checked([sys.executable, "generateExperiment4IniFiles.py"], SCRIPT_DIR, "Generating experiment 4 ini files")
-        entries = selected_entries(args)
-        if not entries:
+            generate_inputs()
+
+        selected = entries(args)
+        if not selected:
             print("no matching configs selected")
             return 1
+
+        if args.end_step == 4 and args.sim_time_limit is not None:
+            for ini_file in {entry.ini_file for entry in selected}:
+                ini = configparser.ConfigParser(interpolation=None, delimiters=('=',))
+                ini.optionxform = str
+                ini.read(EXPERIMENT_DIR / ini_file)
+                duration = ini['General']['sim-time-limit']
+                if args.sim_time_limit != duration:
+                    raise ValueError(f"Phase plots require the configured duration ({duration}); "
+                                     "use --end-step 3 for a shortened diagnostic run")
+
+        if args.dry_run:
+            for entry in selected:
+                print(json.dumps(simulation_command(entry, args)))
+            print(f"Selected {len(selected)} simulations; none launched.")
+            return 0
+
         if args.clean:
             shutil.rmtree(RESULTS_DIR, ignore_errors=True)
             shutil.rmtree(EXPERIMENT_DIR / "csvs", ignore_errors=True)
             shutil.rmtree(SIM_ROOT / "plots" / "experiment4", ignore_errors=True)
+
         if enabled(1, args):
-            run_parallel("Running simulations", lambda entry: run_simulation(entry, args), entries, args)
+            run_parallel("Running simulations", lambda entry: run_simulation(entry, args), selected, args)
+        if args.end_step >= 2:
+            for entry in selected:
+                if not completed(entry, input_fingerprint(entry, args)):
+                    raise RuntimeError(f"{entry.config}: missing or stale successful run; run step 1 first")
         if enabled(2, args):
-            run_parallel("Exporting vectors", export_csv, entries, args)
+            run_parallel("Exporting vectors", export_csv, selected, args)
         if enabled(3, args):
-            run_parallel("Extracting metric CSVs", extract_csv, entries, args)
+            run_parallel("Extracting metric CSVs", extract_csv, selected, args)
         if enabled(4, args):
-            command = [sys.executable, str(SCRIPT_DIR / "plotExperiment4.py"), "--runs"]
-            command.extend(str(run) for run in range(1, args.runs + 1))
+            command = [
+                sys.executable,
+                str(SCRIPT_DIR / "plotExperiment4.py"),
+                "--protocols",
+                *sorted({entry.protocol for entry in selected}),
+                "--runs",
+                *[str(run) for run in range(1, args.runs + 1)],
+            ]
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
             if result.returncode != 0:
                 return result.returncode
-            summary_command = [
-                sys.executable,
-                str(SCRIPT_DIR / "summarizeExperiment4.py"),
-                "--runs",
-            ]
-            summary_command.extend(str(run) for run in range(1, args.runs + 1))
-            return subprocess.run(summary_command, cwd=str(SCRIPT_DIR)).returncode
     except KeyboardInterrupt:
         print("\nCancelled; terminating active child processes.", file=sys.stderr)
         terminate_all_active_processes()
         return 130
+
     return 0
 
 

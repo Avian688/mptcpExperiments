@@ -2,15 +2,6 @@
 
 Generated meeting diagrams for the two `mptcpExperiments` setups.
 
-## Experiment 1
-
-- One user, two subflows.
-- Path 0: fixed 20 ms RTT, 10 Mbps bottleneck.
-- Path 1: swept 20-180 ms RTT, 100 Mbps bottleneck.
-- Queue size: 1554 packets, based on the highest swept BDP.
-- Compare CUBIC and MPORB across default, lowestRTT, and directPull schedulers.
-- Metrics: aggregate goodput, per-subflow goodput, HoL blocked bytes, DSN gap.
-
 ## Experiment 2
 
 - Three users, four subflows each.

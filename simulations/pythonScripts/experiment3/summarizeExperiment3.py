@@ -22,126 +22,145 @@ from summaryHelpers import (
 )
 
 from plotExperiment3 import (
-    BLUE_USERS,
-    CONNECTIONS,
-    IDEAL_AGGREGATE_MBPS,
-    IDEAL_PROBE_PER_CONNECTION_MBPS,
-    IDEAL_TOTAL_PROBE_MBPS,
-    MSS_BYTES,
+    BACKGROUND_FLOW_COUNT,
+    BASELINE_START,
+    COMPETITION_END,
+    COMPETITION_START,
+    CONTESTED_START,
+    FINAL_WINDOW_SECONDS,
+    PATH_CAPACITY_MBPS,
     PROTOCOLS,
-    T_CAPACITY_MBPS,
-    USER_COUNT,
-    USERS_PER_TYPE,
-    X_CAPACITY_MBPS,
+    RECOVERY_FRACTION,
+    SUSTAIN_SECONDS,
     aggregate_summary,
     build_run_summary,
-    common_grid,
     load_bundle,
-    mean_mbps,
-    resample,
+    mean_value,
+    series_end,
 )
 
 
-IDEAL_CONNECTION_MBPS = IDEAL_AGGREGATE_MBPS / USER_COUNT
-IDEAL_BLUE_X1_TOTAL_MBPS = X_CAPACITY_MBPS - IDEAL_TOTAL_PROBE_MBPS
-IDEAL_BLUE_X2_TOTAL_MBPS = IDEAL_AGGREGATE_MBPS / 2 - IDEAL_BLUE_X1_TOTAL_MBPS
-IDEAL_RED_Y1_TOTAL_MBPS = IDEAL_TOTAL_PROBE_MBPS
-IDEAL_RED_Y2_TOTAL_MBPS = IDEAL_AGGREGATE_MBPS / 2 - IDEAL_RED_Y1_TOTAL_MBPS
+FAIR_CONTESTED_PATH2_MBPS = PATH_CAPACITY_MBPS / (BACKGROUND_FLOW_COUNT + 1)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Summarize experiment 3 CSV outcomes.")
     parser.add_argument("--runs", nargs="*", type=int, help="Run IDs to include; default discovers all available runs.")
-    parser.add_argument("--analysis-start", type=float, default=100.0)
     return parser.parse_args()
 
 
-def add_connection_metrics(row: dict[str, object], bundle, analysis_start: float) -> None:
-    grid = common_grid([bundle])
-    grid = grid[grid >= analysis_start]
-    for user in range(USER_COUNT):
-        _name, path_names = CONNECTIONS[user]
-        for index, path_name in enumerate(path_names):
-            key = path_name.split(":", maxsplit=1)[0]
-            row[f"connection_{user}_{key}_mbps"] = mean_mbps(bundle.subflows[user][index], grid)
-            row[f"connection_{user}_{key}_cwnd_packets"] = float(
-                resample(bundle.cwnd[user][index], grid).mean() / MSS_BYTES
-            )
+def add_phase_metrics(row: dict[str, object], bundle) -> None:
+    end = series_end(bundle)
+    final_start = max(COMPETITION_END, end - FINAL_WINDOW_SECONDS)
+    row["analysis_end_time_s"] = end
+    row["final_window_start_time_s"] = final_start
+    for name, series in (("path1", bundle.path1), ("path2", bundle.path2)):
+        row[f"{name}_baseline_mbps"] = mean_value(
+            series, BASELINE_START, COMPETITION_START, 1e6
+        )
+        row[f"{name}_contested_mbps"] = mean_value(
+            series, CONTESTED_START, COMPETITION_END, 1e6
+        )
+        row[f"{name}_final_mbps"] = mean_value(series, final_start, end, 1e6)
+
+    row["main_goodput_baseline_mbps"] = mean_value(
+        bundle.goodput, BASELINE_START, COMPETITION_START, 1e6
+    )
+    row["main_goodput_contested_mbps"] = mean_value(
+        bundle.goodput, CONTESTED_START, COMPETITION_END, 1e6
+    )
+    row["main_goodput_final_mbps"] = mean_value(bundle.goodput, final_start, end, 1e6)
+    for index, series in enumerate(bundle.background_goodput, start=1):
+        row[f"background_{index}_contested_mbps"] = mean_value(
+            series, CONTESTED_START, COMPETITION_END, 1e6
+        )
+    for path_name, queue in bundle.queues.items():
+        key = path_name.lower().replace(" ", "")
+        row[f"{key}_queue_baseline_packets"] = mean_value(
+            queue, BASELINE_START, COMPETITION_START
+        )
+        row[f"{key}_queue_final_packets"] = mean_value(queue, final_start, end)
 
 
-def connection_label(user: int) -> str:
-    return f"B{user + 1}" if user in BLUE_USERS else f"R{user - USERS_PER_TYPE + 1}"
-
-
-def protocol_report(label: str, rows: list[dict[str, object]], analysis_start: float) -> list[str]:
+def protocol_report(label: str, rows: list[dict[str, object]]) -> list[str]:
     run_rows = [
         [
             row["run"],
-            format_value(row.get("blue_total_goodput_mbps")),
-            format_value(row.get("red_total_goodput_mbps")),
-            format_value(row.get("aggregate_goodput_mbps")),
-            format_value(row.get("red_y1_mbps")),
-            format_value(row.get("x_load_mbps")),
-            format_value(row.get("t_load_mbps")),
+            format_value(row.get("main_goodput_baseline_mbps")),
+            format_value(row.get("main_goodput_contested_mbps")),
+            format_value(row.get("main_goodput_final_mbps")),
+            format_value(row.get("path2_contested_mbps")),
+            format_value(row.get("throughput_recovery_time_s")),
+            format_value(row.get("throughput_recovery_deficit_mbit")),
         ]
         for row in sorted(rows, key=lambda item: int(item["run"]))
     ]
 
-    connection_rows = []
-    for user in range(USER_COUNT):
-        name, path_names = CONNECTIONS[user]
-        first = path_names[0].split(":", maxsplit=1)[0]
-        second = path_names[1].split(":", maxsplit=1)[0]
-        connection_rows.append([
-            connection_label(user),
-            name,
-            format_value(IDEAL_CONNECTION_MBPS),
-            format_stat((row.get(f"connection_{user}_goodput_mbps") for row in rows), "Mbps"),
-            f"{first}: {format_stat((row.get(f'connection_{user}_{first}_mbps') for row in rows), 'Mbps')}",
-            f"{second}: {format_stat((row.get(f'connection_{user}_{second}_mbps') for row in rows), 'Mbps')}",
+    phase_rows = []
+    for path in ("path1", "path2"):
+        phase_rows.append([
+            path.title().replace("Path", "Path "),
+            format_stat((row.get(f"{path}_baseline_mbps") for row in rows), "Mbps"),
+            format_stat((row.get(f"{path}_contested_mbps") for row in rows), "Mbps"),
+            format_stat((row.get(f"{path}_final_mbps") for row in rows), "Mbps"),
         ])
+    phase_rows.append([
+        "Main app",
+        format_stat((row.get("main_goodput_baseline_mbps") for row in rows), "Mbps"),
+        format_stat((row.get("main_goodput_contested_mbps") for row in rows), "Mbps"),
+        format_stat((row.get("main_goodput_final_mbps") for row in rows), "Mbps"),
+    ])
 
-    class_rows = [
-        ["Blue x1 (X)", format_value(IDEAL_BLUE_X1_TOTAL_MBPS), format_stat((row.get("blue_x1_mbps") for row in rows), "Mbps")],
-        ["Blue x2 (T)", format_value(IDEAL_BLUE_X2_TOTAL_MBPS), format_stat((row.get("blue_x2_mbps") for row in rows), "Mbps")],
-        ["Red y1 (X then T)", format_value(IDEAL_RED_Y1_TOTAL_MBPS), format_stat((row.get("red_y1_mbps") for row in rows), "Mbps")],
-        ["Red y2 (T)", format_value(IDEAL_RED_Y2_TOTAL_MBPS), format_stat((row.get("red_y2_mbps") for row in rows), "Mbps")],
+    background_rows = [
+        [
+            f"Background {index}",
+            format_value(FAIR_CONTESTED_PATH2_MBPS),
+            format_stat((row.get(f"background_{index}_contested_mbps") for row in rows), "Mbps"),
+        ]
+        for index in range(1, BACKGROUND_FLOW_COUNT + 1)
+    ]
+
+    queue_rows = [
+        [
+            path,
+            format_stat((row.get(f"{key}_queue_baseline_packets") for row in rows), "packets"),
+            format_stat((row.get(f"{key}_queue_contested_packets") for row in rows), "packets"),
+            format_stat((row.get(f"{key}_queue_final_packets") for row in rows), "packets"),
+        ]
+        for path, key in (("Path 1", "path1"), ("Path 2", "path2"))
     ]
 
     return [
-        f"EXPERIMENT 3 - {label}",
+        f"EXPERIMENT 4 - {label}",
         "\n".join([
             "PURPOSE AND SUBFLOW GOALS",
-            "Test Pareto efficiency and traffic shifting using only multipath connections.",
-            "Four Blue connections use x1 through X and x2 through T. Four Red connections use y2 through T and an inefficient y1 route through X then T.",
-            "Red opens y2 first and y1 at 30 s. An efficient controller should leave only a one-MSS-per-RTT probe on each inefficient y1, not abandon it completely.",
-            f"Reference probe: {IDEAL_PROBE_PER_CONNECTION_MBPS:.3f} Mbps per Red y1, {IDEAL_TOTAL_PROBE_MBPS:.3f} Mbps total.",
-            f"Ideal aggregate goodput: {IDEAL_AGGREGATE_MBPS:.3f} Mbps; equal connection share: {IDEAL_CONNECTION_MBPS:.3f} Mbps.",
-            f"Ideal per-connection paths: Blue x1 {IDEAL_BLUE_X1_TOTAL_MBPS / USERS_PER_TYPE:.3f}, Blue x2 {IDEAL_BLUE_X2_TOTAL_MBPS / USERS_PER_TYPE:.3f}, Red y1 {IDEAL_RED_Y1_TOTAL_MBPS / USERS_PER_TYPE:.3f}, Red y2 {IDEAL_RED_Y2_TOTAL_MBPS / USERS_PER_TYPE:.3f} Mbps.",
+            "Test responsiveness when one subflow's path suddenly becomes contested and later clears.",
+            f"The main MPTCP connection has two 20 Mbps, 20 ms paths. Five one-subflow connections join Path 2 at {COMPETITION_START:g} s and stop at {COMPETITION_END:g} s.",
+            "Path 1 goal: remain close to 20 Mbps throughout. Path 2 goal: start near 20 Mbps, yield under competition, then recover near 20 Mbps quickly and without a large recovery deficit.",
+            "Main application goal: start and finish near 40 Mbps while shifting traffic promptly enough to limit the contested-period reduction.",
+            f"An uncoupled equal-flow reference during competition is {FAIR_CONTESTED_PATH2_MBPS:.2f} Mbps for the main Path 2 subflow and each background connection; it is a reference, not a hard target for coupled MPTCP.",
         ]),
         "\n".join([
-            "MEASUREMENT",
-            f"All means use {analysis_start:g} s to each run's end, well after Red y1 joins at 30 s.",
-            "Connection values are application goodput; subflow values are receiver-side TCP throughput vectors.",
-            "X load counts Blue x1 plus Red y1. T load counts Blue x2, Red y1, and Red y2 because y1 consumes both bottlenecks.",
+            "MEASUREMENT WINDOWS",
+            f"Baseline: {BASELINE_START:g}-{COMPETITION_START:g} s.",
+            f"Contested steady state: {CONTESTED_START:g}-{COMPETITION_END:g} s, excluding the initial response transient.",
+            f"Final: the last {FINAL_WINDOW_SECONDS:g} s after competition ends.",
+            "Main-connection values are application goodput; path values are receiver-side TCP throughput vectors.",
+            f"Recovery requires at least {RECOVERY_FRACTION * 100:.0f}% of baseline sustained for {SUSTAIN_SECONDS:g} s after {COMPETITION_END:g} s.",
         ]),
-        "PER-RUN OUTCOMES (Mbps)\n" + text_table(
-            ["Run", "Blue total", "Red total", "Aggregate", "Red y1", "X load", "T load"],
+        "PER-RUN OUTCOMES (rates in Mbps)\n" + text_table(
+            ["Run", "App base", "App contested", "App final", "Path 2 contested", "Recovery s", "Deficit Mbit"],
             run_rows,
         ),
-        "CONNECTION AND SUBFLOW OUTCOMES\n" + text_table(
-            ["Conn", "Type", "Conn target", "Conn achieved", "First subflow", "Second subflow"],
-            connection_rows,
-        ),
-        "SUBFLOW-CLASS TOTALS\n" + text_table(["Class", "Target", "Achieved"], class_rows),
+        "PHASE MEANS\n" + text_table(["Series", "Baseline", "Contested", "Final"], phase_rows),
+        "BACKGROUND FLOW OUTCOMES\n" + text_table(["Flow", "Fair reference", "Achieved"], background_rows),
+        "QUEUE OCCUPANCY\n" + text_table(["Queue", "Baseline", "Contested", "Final"], queue_rows),
         "\n".join([
             "PROTOCOL MEAN",
-            f"Blue total: {format_stat((row.get('blue_total_goodput_mbps') for row in rows), 'Mbps')}",
-            f"Red total: {format_stat((row.get('red_total_goodput_mbps') for row in rows), 'Mbps')}",
-            f"Aggregate: {format_stat((row.get('aggregate_goodput_mbps') for row in rows), 'Mbps')}",
-            f"Red y1 excess above probe target: {format_stat((row.get('red_y1_excess_mbps') for row in rows), 'Mbps')}",
-            f"X queue: {format_stat((row.get('x_queue_packets') for row in rows), 'packets')}",
-            f"T queue: {format_stat((row.get('t_queue_packets') for row in rows), 'packets')}",
+            f"Final main goodput: {format_stat((row.get('main_goodput_final_mbps') for row in rows), 'Mbps')}",
+            f"Path 2 throughput recovery: {format_stat((row.get('throughput_recovery_time_s') for row in rows), 's')}",
+            f"Path 2 recovery deficit: {format_stat((row.get('throughput_recovery_deficit_mbit') for row in rows), 'Mbit')}",
+            f"Throughput recovery success fraction: {format_stat((row.get('throughput_recovery_success') for row in rows), digits=2)}",
         ]),
     ]
 
@@ -167,11 +186,8 @@ def main() -> int:
             if bundle is None:
                 incomplete.append(f"{label} run{run}")
                 continue
-            row = build_run_summary(bundle, args.analysis_start)
-            if not row:
-                incomplete.append(f"{label} run{run}")
-                continue
-            add_connection_metrics(row, bundle, args.analysis_start)
+            row = build_run_summary(bundle)
+            add_phase_metrics(row, bundle)
             rows.append(row)
 
     if not rows:
@@ -188,23 +204,20 @@ def main() -> int:
         group = [row for row in rows if row["protocol"] == protocol]
         if not group:
             continue
-        write_text(
-            out_dir / report_filename(protocol),
-            protocol_report(label, group, args.analysis_start),
-        )
+        write_text(out_dir / report_filename(protocol), protocol_report(label, group))
         overview_rows.append([
             label,
             len(group),
-            format_stat((row.get("blue_total_goodput_mbps") for row in group), "Mbps"),
-            format_stat((row.get("red_total_goodput_mbps") for row in group), "Mbps"),
-            format_stat((row.get("aggregate_goodput_mbps") for row in group), "Mbps"),
-            format_stat((row.get("red_y1_mbps") for row in group), "Mbps"),
+            format_stat((row.get("main_goodput_contested_mbps") for row in group), "Mbps"),
+            format_stat((row.get("main_goodput_final_mbps") for row in group), "Mbps"),
+            format_stat((row.get("throughput_recovery_time_s") for row in group), "s"),
+            format_stat((row.get("throughput_recovery_deficit_mbit") for row in group), "Mbit"),
         ])
 
     sections = [
-        "EXPERIMENT 3 OUTCOME OVERVIEW",
+        "EXPERIMENT 4 OUTCOME OVERVIEW",
         f"Discovered run IDs: {', '.join(map(str, runs))}",
-        text_table(["Protocol", "Runs", "Blue total", "Red total", "Aggregate", "Red y1"], overview_rows),
+        text_table(["Protocol", "Runs", "Contested app", "Final app", "Recovery", "Deficit"], overview_rows),
     ]
     if incomplete:
         sections.append("INCOMPLETE DATA\n" + "\n".join(f"- {item}" for item in incomplete))

@@ -1,6 +1,6 @@
 # MpOrbSemiCoupledAlpha scheduler comparison
 
-Experiment 4's two-path topology, comparing the foreground connection's `default`,
+Experiment 3's two-path topology, comparing the foreground connection's `default`,
 `defaultCwnd` and `intInformed` schedulers. The algorithm is **MpOrbSemiCoupledAlpha**. Five single-subflow MpOrbSemiCoupledAlpha background
 connections compete on path 2. Their scheduler stays `default` in every case.
 

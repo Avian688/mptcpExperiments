@@ -142,62 +142,6 @@ def pill(x: float, y: float, label: str, fill: str, stroke: str, text_fill: str 
     ]
 
 
-def generate_experiment1() -> Path:
-    body: list[str] = []
-    body.append(text(70, 58, "Experiment 1: Scheduler Negatives on Two LEO-Like Paths", size=34, weight=850))
-    body.extend(
-        multiline(
-            70,
-            94,
-            [
-                "One MPTCP/MPORB connection, two subflows. Path 0 is fixed and narrow; Path 1 is high-capacity with swept RTT.",
-                "Goal: expose scheduler-induced reordering / HoL blocking when subflows have very different delay-capacity profiles.",
-            ],
-            size=19,
-            leading=26,
-        )
-    )
-
-    body.extend(node(90, 360, 150, 92, "Client[0]", "1 app", COLOR["ink"]))
-    body.extend(node(1160, 360, 150, 92, "Server[0]", "sink", COLOR["ink"]))
-    body.extend(node(350, 215, 130, 84, "R1a", "path 0", COLOR["blue"], COLOR["blue_soft"]))
-    body.extend(node(810, 215, 130, 84, "R2a", "path 0", COLOR["blue"], COLOR["blue_soft"]))
-    body.extend(node(350, 525, 130, 84, "R1b", "path 1", COLOR["orange"], COLOR["orange_soft"]))
-    body.extend(node(810, 525, 130, 84, "R2b", "path 1", COLOR["orange"], COLOR["orange_soft"]))
-
-    # Fixed path.
-    body.append(line(240, 392, 350, 257, COLOR["blue"], 5, opacity=0.85))
-    body.append(line(480, 257, 810, 257, COLOR["blue"], 9, opacity=0.9))
-    body.append(line(940, 257, 1160, 392, COLOR["blue"], 5, opacity=0.85))
-    body.extend(label_box(540, 135, ["Path 0 fixed", "RTT 20 ms | 10 Mbps", "Q = 1554 packets"], COLOR["blue_soft"], COLOR["blue"], w=290, h=98))
-    body.append(rect(622, 248, 64, 22, "#ffffff", COLOR["blue"], 1.5, 6))
-    body.append(text(654, 264, "Q", size=16, fill=COLOR["blue"], weight=850, anchor="middle"))
-    body.append(text(302, 300, "5 ms access", size=15, fill=COLOR["blue"], weight=750, anchor="middle"))
-    body.append(text(1020, 307, "5 ms access", size=15, fill=COLOR["blue"], weight=750, anchor="middle"))
-
-    # Variable path.
-    body.append(line(240, 420, 350, 567, COLOR["orange"], 5, opacity=0.85))
-    body.append(line(480, 567, 810, 567, COLOR["orange"], 9, opacity=0.9))
-    body.append(line(940, 567, 1160, 420, COLOR["orange"], 5, opacity=0.85))
-    body.extend(label_box(540, 625, ["Path 1 swept", "RTT 20-180 ms | 100 Mbps", "Q = 1554 packets"], COLOR["orange_soft"], COLOR["orange"], w=330, h=98))
-    body.append(rect(622, 558, 64, 22, "#ffffff", COLOR["orange"], 1.5, 6))
-    body.append(text(654, 574, "Q", size=16, fill=COLOR["orange"], weight=850, anchor="middle"))
-    body.append(text(302, 533, "5-45 ms access", size=15, fill=COLOR["orange"], weight=750, anchor="middle"))
-    body.append(text(1030, 533, "5-45 ms access", size=15, fill=COLOR["orange"], weight=750, anchor="middle"))
-
-    body.extend(label_box(70, 675, ["Sweep configs", "RTT: 20, 40, ..., 180 ms", "Protocols: CUBIC, MPORB", "Schedulers: default, lowestRTT, directPull"], "#ffffff", COLOR["grid"], w=390, h=136))
-    body.extend(label_box(910, 675, ["Recorded outputs", "aggregate goodput", "per-subflow goodput", "HoL blocked bytes", "DSN gap at receiver"], "#ffffff", COLOR["grid"], w=390, h=136))
-
-    body.append(rect(500, 748, 380, 78, COLOR["red_soft"], COLOR["red"], 1.5, 14))
-    body.append(text(690, 773, "Failure signal", size=18, fill=COLOR["red"], weight=850, anchor="middle"))
-    body.append(text(690, 797, "High subflow throughput", size=15, fill=COLOR["ink"], weight=650, anchor="middle"))
-    body.append(text(690, 818, "but lower app goodput / receiver HoL", size=15, fill=COLOR["ink"], weight=650, anchor="middle"))
-
-    out = OUT_DIR / "experiment1_setup.svg"
-    out.write_text(svg_doc(1400, 860, body), encoding="utf-8")
-    return out
-
-
 def generate_experiment2() -> Path:
     body: list[str] = []
     body.append(text(70, 58, "Experiment 2: Uncoupled Fairness over Shared LEO Paths", size=34, weight=850))
@@ -324,16 +268,7 @@ def write_notes() -> Path:
             [
                 "# MPTCP Experiment Diagrams",
                 "",
-                "Generated meeting diagrams for the two `mptcpExperiments` setups.",
-                "",
-                "## Experiment 1",
-                "",
-                "- One user, two subflows.",
-                "- Path 0: fixed 20 ms RTT, 10 Mbps bottleneck.",
-                "- Path 1: swept 20-180 ms RTT, 100 Mbps bottleneck.",
-                "- Queue size: 1554 packets, based on the highest swept BDP.",
-                "- Compare CUBIC and MPORB across default, lowestRTT, and directPull schedulers.",
-                "- Metrics: aggregate goodput, per-subflow goodput, HoL blocked bytes, DSN gap.",
+                "Generated meeting diagrams for the retained experiment 2 setup.",
                 "",
                 "## Experiment 2",
                 "",
@@ -352,7 +287,7 @@ def write_notes() -> Path:
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    generated = [generate_experiment1(), generate_experiment2(), write_notes()]
+    generated = [generate_experiment2(), write_notes()]
     for path in generated:
         print(path)
 

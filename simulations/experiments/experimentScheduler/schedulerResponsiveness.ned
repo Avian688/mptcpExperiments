@@ -7,7 +7,7 @@ import inet.node.inet.StandardHost;
 import ned.DatarateChannel;
 import tcppaced.networklayer.configurator.ipv4.AutoNetworkConfigurator;
 
-// Experiment 4 topology with independently configurable path propagation RTTs.
+// Experiment 3 topology with independently configurable path propagation RTTs.
 network schedulerResponsiveness
 {
     parameters:

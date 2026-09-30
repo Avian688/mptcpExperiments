@@ -4,21 +4,18 @@ from __future__ import annotations
 
 import math
 import random
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 MSS_BYTES = 1448
-USERS_PER_TYPE = 4
-USER_COUNT = 2 * USERS_PER_TYPE
-PATH_RTT_MS = 50
-X_MBPS = 27
-T_MBPS = 36
-SIM_TIME_LIMIT_S = 150
+PATH_MBPS = 20
+PATH_RTT_MS = 20
+BACKGROUND_FLOW_COUNT = 5
+BACKGROUND_INITIAL_SSTHRESH_BYTES = 40_000
+COMPETITION_START_S = 40
+COMPETITION_END_S = 80
+SIM_TIME_LIMIT_S = 200
 RUNS = range(1, 6)
-START_RANDOM_WINDOW_S = 0.5
-START_RANDOM_SEED = 3999
-RED_Y1_START_DELAY_S = 30
-ONE_MSS_INITIAL_SSTHRESH_PROTOCOLS = {"olia", "balia"}
+START_RANDOM_SEED = 4999
 
 PROTOCOLS = {
     "lia": {
@@ -80,29 +77,14 @@ PROTOCOLS = {
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
 EXPERIMENT_DIR = SIM_ROOT / "experiments" / "experiment3"
-SCENARIO_DIR = SIM_ROOT / "experiments" / "scenarios" / "experiment3"
 
 
-def highest_bdp_packets() -> int:
-    return math.ceil(T_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
+def bdp_packets() -> int:
+    return math.ceil(PATH_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
 
 
-def initial_ssthresh_bytes(protocol: str) -> int:
-    if protocol in ONE_MSS_INITIAL_SSTHRESH_PROTOCOLS:
-        return MSS_BYTES
-
-    packets = math.ceil(
-        X_MBPS
-        * 1_000_000
-        * (PATH_RTT_MS / 1000)
-        / (MSS_BYTES * 8 * USERS_PER_TYPE)
-    )
-    return packets * MSS_BYTES
-
-
-def flow_start_times(run: int) -> list[float]:
-    rng = random.Random(START_RANDOM_SEED + run)
-    return [rng.uniform(0.1, START_RANDOM_WINDOW_S) for _ in range(USER_COUNT)]
+def flow_start_time(run: int) -> float:
+    return random.Random(START_RANDOM_SEED + run).uniform(0.1, 2.0)
 
 
 def common_ned_path_line() -> str:
@@ -131,79 +113,13 @@ def common_ned_path_line() -> str:
     return "ned-path = " + ":".join(paths)
 
 
-def client_configuration_lines() -> list[str]:
-    lines: list[str] = []
-    for user in range(USER_COUNT):
-        if user < USERS_PER_TYPE:
-            remote_addresses = f"server[{user}]>blueXExit server[{user}]>blueTExit"
-        else:
-            remote_addresses = f"server[{user}]>redTExit server[{user}]>redXExit"
-        lines.extend(
-            [
-                f'*.client[{user}].app[0].connectAddress = "server[{user}]"',
-                f'*.client[{user}].tcp.subflowRemoteAddresses = "{remote_addresses}"',
-            ]
-        )
-    return lines
-
-
-def write_routes_xml() -> Path:
-    SCENARIO_DIR.mkdir(parents=True, exist_ok=True)
-    root = ET.Element("config")
-    ET.SubElement(
-        root,
-        "interface",
-        {"hosts": "**", "address": "10.x.x.x", "netmask": "255.x.x.x"},
-    )
-    root.append(
-        ET.Comment(
-            " Routers and servers use shortest paths. Explicit client routes keep "
-            "Red y1 on X then T instead of collapsing onto y2. "
-        )
-    )
-    ET.SubElement(
-        root,
-        "autoroute",
-        {
-            "sourceHosts": (
-                "xIngress xEgress tIngress tEgress blueXExit blueTExit "
-                "redXExit redTExit server[*]"
-            ),
-            "metric": "delay",
-        },
-    )
-
-    for user in range(USER_COUNT):
-        if user < USERS_PER_TYPE:
-            exits = (("blueXExit", "xIngress"), ("blueTExit", "tIngress"))
-        else:
-            exits = (("redXExit", "xIngress"), ("redTExit", "tIngress"))
-        for exit_router, ingress in exits:
-            ET.SubElement(
-                root,
-                "route",
-                {
-                    "hosts": f"client[{user}]",
-                    "destination": f"server[{user}]>{exit_router}",
-                    "netmask": "/32",
-                    "gateway": f"{ingress}>client[{user}]",
-                },
-            )
-
-    ET.indent(root, space="    ")
-    path = SCENARIO_DIR / "routes.xml"
-    ET.ElementTree(root).write(path, encoding="unicode")
-    path.write_text(path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    return path
-
-
-def write_common_general(write, protocol: str) -> None:
-    queue_packets = highest_bdp_packets()
+def write_common_general(write) -> None:
+    queue_packets = bdp_packets()
     lines = (
         "[General]",
         common_ned_path_line(),
         "",
-        "network = mptcpexperiments.simulations.experiments.experiment3.oliapareto",
+        "network = mptcpexperiments.simulations.experiments.experiment3.baliaresponsiveness",
         f"sim-time-limit = {SIM_TIME_LIMIT_S}s",
         "record-eventlog = false",
         "cmdenv-express-mode = true",
@@ -213,38 +129,54 @@ def write_common_general(write, protocol: str) -> None:
         "cmdenv-log-prefix = %t | %m |",
         "**.cmdenv-log-level = off",
         "",
-        f"# Compact Scenario B: {USERS_PER_TYPE} Blue and {USERS_PER_TYPE} Red MPTCP connections.",
-        "# OLIA motivation: Red y1 crosses both X and T, so each Mbps on y1",
-        "# consumes two bottlenecks and reduces achievable aggregate goodput by one Mbps.",
-        "# Blue paths: x1=X, x2=T. Red paths: y1=X->T, y2=T.",
-        f"# Blue opens both paths immediately; Red opens y2 first and y1 after {RED_Y1_START_DELAY_S} s.",
-        f"# All paths have {PATH_RTT_MS} ms base RTT; X={X_MBPS} Mbps and T={T_MBPS} Mbps.",
-        f"# Every queue uses the higher BDP: {queue_packets} packets at MSS {MSS_BYTES}.",
+        f"# BALIA responsiveness test: two fixed {PATH_MBPS} Mbps, {PATH_RTT_MS} ms paths.",
+        f"# Five one-subflow connections using the tested CC join path 2 together at "
+        f"{COMPETITION_START_S} s, then stop admitting new data at {COMPETITION_END_S} s.",
+        f"# Every queue uses the highest path BDP: {queue_packets} packets at MSS {MSS_BYTES}.",
+        "*.backgroundClient[*].app[0].numberOfSubflows = 1",
+        "*.backgroundServer[*].app[0].numberOfSubflows = 1",
+        "*.backgroundClient[*].tcp.conn-*.numberOfSubflows = 1",
+        "*.backgroundServer[*].tcp.conn-*.numberOfSubflows = 1",
+        f"*.backgroundClient[*].tcp.initialSsthresh = {BACKGROUND_INITIAL_SSTHRESH_BYTES}",
         "**.numberOfSubflows = 2",
         "**.startAllSubflowsAtBeginning = true",
-        *(
-            f'*.client[{user}].tcp.conn-*.subflowStartTimes = "0s {RED_Y1_START_DELAY_S}s"'
-            for user in range(USERS_PER_TYPE, USER_COUNT)
-        ),
         "**.subflowStartTimes = \"\"",
-        "*.configurator.config = xmldoc(\"../scenarios/experiment3/routes.xml\")",
+        "*.configurator.config = xml(\"<config><interface hosts='**' address='10.x.x.x' netmask='255.x.x.x'/><autoroute metric='delay'/></config>\")",
         "*.configurator.addDefaultRoutes = false",
         "*.configurator.addSubnetRoutes = false",
         "*.configurator.optimizeRoutes = false",
+        "*.scenarioManager.script = xmldoc(\"../scenarios/experiment3/conditions.xml\")",
         "",
-        "**.client[*].numApps = 1",
-        "**.client[*].app[0].typename = \"MpTcpSessionApp\"",
-        *client_configuration_lines(),
-        "**.client[*].app[0].tOpen = 0.1s",
-        "**.client[*].app[0].tSend = 0.1s",
-        "**.client[*].app[0].tClose = -1s",
-        "**.client[*].app[0].sendBytes = 2GB",
-        "**.client[*].app[0].dataTransferMode = \"bytecount\"",
-        "**.client[*].app[0].statistic-recording = true",
+        "*.client[0].numApps = 1",
+        "*.client[0].app[0].typename = \"MpTcpSessionApp\"",
+        "*.client[0].app[0].connectAddress = \"server[0]\"",
+        "*.client[0].tcp.subflowRemoteAddresses = \"server[0]>p1Egress server[0]>p2Egress\"",
+        "*.client[0].app[0].tOpen = 0.1s",
+        "*.client[0].app[0].tSend = 0.1s",
+        "*.client[0].app[0].tClose = -1s",
+        "*.client[0].app[0].sendBytes = 2GB",
+        "*.client[0].app[0].dataTransferMode = \"bytecount\"",
         "",
-        "**.server[*].numApps = 1",
-        "**.server[*].app[0].typename = \"MpTcpSinkApp\"",
-        "**.server[*].app[0].serverThreadModuleType = \"tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread\"",
+        "*.server[0].numApps = 1",
+        "*.server[0].app[0].typename = \"MpTcpSinkApp\"",
+        "*.server[0].app[0].serverThreadModuleType = \"tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread\"",
+        "",
+        "*.backgroundClient[*].numApps = 1",
+        "*.backgroundClient[*].app[0].typename = \"MpTcpSessionApp\"",
+        "*.backgroundClient[*].app[0].connectPort = 1000",
+        "*.backgroundClient[*].app[0].tClose = -1s",
+        "*.backgroundClient[*].app[0].sendBytes = 2GB",
+        "*.backgroundClient[*].app[0].dataTransferMode = \"bytecount\"",
+        "*.backgroundClient[0].app[0].connectAddress = \"backgroundServer[0]\"",
+        "*.backgroundClient[1].app[0].connectAddress = \"backgroundServer[1]\"",
+        "*.backgroundClient[2].app[0].connectAddress = \"backgroundServer[2]\"",
+        "*.backgroundClient[3].app[0].connectAddress = \"backgroundServer[3]\"",
+        "*.backgroundClient[4].app[0].connectAddress = \"backgroundServer[4]\"",
+        "",
+        "*.backgroundServer[*].numApps = 1",
+        "*.backgroundServer[*].app[0].typename = \"MpTcpSinkApp\"",
+        "*.backgroundServer[*].app[0].localPort = 1000",
+        "*.backgroundServer[*].app[0].serverThreadModuleType = \"tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread\"",
         "",
         "**.tcp.advertisedWindow = 200000000",
         "**.tcp.windowScalingSupport = true",
@@ -257,16 +189,67 @@ def write_common_general(write, protocol: str) -> None:
         "**.tcp.stopOperationTimeout = 4000s",
         f"**.tcp.mss = {MSS_BYTES}",
         "**.tcp.sackSupport = true",
-        f"**.tcp.initialSsthresh = {initial_ssthresh_bytes(protocol)}",
-        "**.tcp.sendQueueLimit = 4MiB",
-        "**.schedulerMode = \"default\"",
+        "# Exercise the updated SACK scoreboard for every MPTCP subflow.",
+        "**.tcp.updatedSackEnabled = true",
+        "*.client[0].tcp.sendQueueLimit = 4MiB",
+        "*.server[0].tcp.sendQueueLimit = 4MiB",
+        "*.client[0].tcp.conn-*.schedulerMode = \"default\"",
+        "*.server[0].tcp.conn-*.schedulerMode = \"default\"",
         "",
-        "**.goodputInterval = 1s",
-        "**.throughputInterval = 1s",
+        "**.goodputInterval = 0.5s",
+        "**.throughputInterval = 0.5s",
+        "**.**.tcp.conn-temp.**.statistic-recording = false",
+        "**.**.goodput.statistic-recording = true",
         "**.**.goodput:vector(removeRepeats).vector-recording = true",
         "**.**.goodput.result-recording-modes = vector(removeRepeats)",
+        "**.**.tcp.conn-*.throughput.statistic-recording = true",
+        "**.**.tcp.conn-*.cwnd.statistic-recording = true",
+        "**.**.tcp.conn-*.cwndLimited.statistic-recording = true",
+        "**.**.tcp.conn-*.lossRecovery.statistic-recording = true",
+        "**.**.tcp.conn-*.numRtos.statistic-recording = true",
+        "**.**.tcp.conn-*.retransmissionRate.statistic-recording = true",
+        "**.**.tcp.conn-*.liaAlpha.statistic-recording = true",
+        "**.**.tcp.conn-*.oliaEpsilon.statistic-recording = true",
+        "**.**.tcp.conn-*.baliaAi.statistic-recording = true",
+        "**.**.tcp.conn-*.baliaMd.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaSubflowRate.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaConnectionRate.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledAlphaRateShare.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaBestPath.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaMaxWindowPath.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaCorrection.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaPathPrice.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaPathOpportunity.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaAlphaAi.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaUncoupledAi.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeight.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeightCorrection.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaSmoothedU.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaUtilizationError.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaRateShare.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaBaselineShare.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaRedistributionActive.statistic-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeightedAi.statistic-recording = true",
+        "**.**.tcp.conn-*.additiveIncrease.statistic-recording = true",
+        "**.**.tcp.conn-*.U.statistic-recording = true",
+        "**.**.tcp.conn-*.holBlockedBytes.statistic-recording = true",
+        "**.**.tcp.conn-*.subflowSendQueueBytes.statistic-recording = true",
+        "**.**.tcp.conn-*.metaReinjectedBytes.statistic-recording = true",
+        "**.**.tcp.conn-*.metaReinjections.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonPathCost.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaFairRate.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaHeadroomRate.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaAiShare.statistic-recording = true",
+        "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate.statistic-recording = true",
         "**.**.tcp.conn-*.throughput:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.cwnd:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.cwndLimited:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.lossRecovery:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.numRtos:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.retransmissionRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.liaAlpha:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.oliaEpsilon:vector(removeRepeats).vector-recording = true",
@@ -281,9 +264,22 @@ def write_common_general(write, protocol: str) -> None:
         "**.**.tcp.conn-*.mpOrbOliaPathPrice:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaPathOpportunity:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledBetaFairRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledBetaTotalFairRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledBetaFairRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaAlphaAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaUncoupledAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeight:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeightCorrection:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaSmoothedU:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaUtilizationError:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaRateShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaBaselineShare:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaRedistributionActive:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.mpOrbBetaWeightedAi:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.additiveIncrease:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.U:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.holBlockedBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.subflowSendQueueBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
+        "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonPathCost:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
@@ -293,11 +289,14 @@ def write_common_general(write, protocol: str) -> None:
         "**.**.tcp.conn-*.semiCoupledThetaAiShare:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
-        "**.xIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
-        "**.tIngress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
-        "**.xIngress.ppp[0].queue.queueLength.result-recording-modes = vector(removeRepeats)",
-        "**.tIngress.ppp[0].queue.queueLength.result-recording-modes = vector(removeRepeats)",
+        "**.p1Ingress.ppp[0].queue.queueLength.statistic-recording = true",
+        "**.p2Ingress.ppp[0].queue.queueLength.statistic-recording = true",
+        "**.p1Ingress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
+        "**.p2Ingress.ppp[0].queue.queueLength:vector(removeRepeats).vector-recording = true",
+        "**.p1Ingress.ppp[0].queue.queueLength.result-recording-modes = vector(removeRepeats)",
+        "**.p2Ingress.ppp[0].queue.queueLength.result-recording-modes = vector(removeRepeats)",
         f"**.ppp[*].queue.packetCapacity = {queue_packets}",
+        "**.statistic-recording = false",
         "**.scalar-recording = false",
         "**.vector-recording = false",
         "**.bin-recording = false",
@@ -308,51 +307,58 @@ def write_common_general(write, protocol: str) -> None:
 
 
 def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> None:
-    write(f'**.tcp.typename = "{settings["tcp_type"]}"')
-    write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
+    write(f'*.client[0].tcp.typename = "{settings["tcp_type"]}"')
+    write(f'*.server[0].tcp.typename = "{settings["tcp_type"]}"')
+    write(f'*.client[0].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
+    write(f'*.server[0].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
+    write(f'*.backgroundClient[*].tcp.typename = "{settings["tcp_type"]}"')
+    write(f'*.backgroundServer[*].tcp.typename = "{settings["tcp_type"]}"')
+    write(f'*.backgroundClient[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
+    write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
     if is_mporb:
         write("# Specific PintQueue assignments must precede the broad fallback.")
-        write('**.xIngress.ppp[0].queue.typename = "PintQueue"')
-        write('**.tIngress.ppp[0].queue.typename = "PintQueue"')
+        write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
+        write('**.p2Ingress.ppp[0].queue.typename = "PintQueue"')
     write('**.ppp[*].queue.typename = "DropTailQueue"')
     write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if is_mporb:
         write("**.additiveIncreasePercent = 0.05")
         write("**.eta = 0.95")
         write("**.alpha = 0.03")
-        write("**.fixedAvgRTTVal = 0")
+        write("**.fixedAvgRTTVal = 0s")
     write()
 
 
 def write_config(write, settings: dict[str, str], run: int) -> None:
     config = f'{settings["config"]}_Run{run}'
+    start_time = flow_start_time(run)
     write(f"[Config {config}]")
     write("extends = General")
-    write(f'description = "{settings["description"]}; all-MPTCP Scenario B, run {run}."')
+    write(f'description = "{settings["description"]}; BALIA responsiveness test, run {run}."')
     write(f"seed-set = {run}")
-    for user, start_time in enumerate(flow_start_times(run)):
-        write(f"*.client[{user}].app[0].tOpen = {start_time:.6f}s")
-        write(f"*.client[{user}].app[0].tSend = {start_time:.6f}s")
+    write(f"*.client[0].app[0].tOpen = {start_time:.6f}s")
+    write(f"*.client[0].app[0].tSend = {start_time:.6f}s")
+    for index in range(BACKGROUND_FLOW_COUNT):
+        write(f"*.backgroundClient[{index}].app[0].tOpen = {COMPETITION_START_S}s")
+        write(f"*.backgroundClient[{index}].app[0].tSend = {COMPETITION_START_S}s")
     write(f'output-vector-file = "results/{config}-#0.vec"')
     write(f'output-scalar-file = "results/{config}-#0.sca"')
     write()
 
 
 def main() -> None:
-    if highest_bdp_packets() != 156:
-        raise RuntimeError(f"unexpected higher-BDP packet count: {highest_bdp_packets()}")
+    if bdp_packets() != 35:
+        raise RuntimeError(f"unexpected BDP packet count: {bdp_packets()}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
-    routes_path = write_routes_xml()
-    print(f"Generated {routes_path}.")
     for protocol, settings in PROTOCOLS.items():
         out_path = EXPERIMENT_DIR / f"experiment3_{protocol}.ini"
         with out_path.open("w", encoding="utf-8") as output:
             def write(line: str = "") -> None:
                 output.write(line + "\n")
 
-            write_common_general(write, protocol)
+            write_common_general(write)
             write_protocol_settings(write, protocol, settings)
             for run in RUNS:
                 write_config(write, settings, run)

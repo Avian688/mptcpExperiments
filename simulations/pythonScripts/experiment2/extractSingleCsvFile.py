@@ -10,6 +10,8 @@ import numpy as np
 import pandas as pd
 
 VECTORS_TO_EXTRACT = {
+    "additiveIncrease",
+    "U",
     "goodput",
     "throughput",
     "cwnd",
@@ -32,6 +34,17 @@ VECTORS_TO_EXTRACT = {
     "mpOrbOliaPathPrice",
     "mpOrbOliaPathOpportunity",
     "mpOrbOliaNormalizedWindow",
+    "mpOrbBetaRelaxation",
+    "mpOrbBetaWeight",
+    "mpOrbBetaWeightCorrection",
+    "mpOrbBetaSmoothedU",
+    "mpOrbBetaUtilizationError",
+    "mpOrbBetaRateShare",
+    "mpOrbBetaBaselineShare",
+    "mpOrbBetaRedistributionActive",
+    "mpOrbBetaWeightedAi",
+    "mpOrbBetaAlphaAi",
+    "mpOrbBetaUncoupledAi",
     "semiCoupledBetaFairRate",
     "semiCoupledBetaTotalFairRate",
     "semiCoupledBetaFairRateShare",
