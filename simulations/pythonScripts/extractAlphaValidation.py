@@ -60,7 +60,8 @@ def write_metric(out_root: Path, module_name: str, metric: str, times, values) -
     return True
 
 
-def main() -> int:
+def main(metrics=None) -> int:
+    selected_metrics = VECTORS_TO_EXTRACT if metrics is None else set(metrics)
     if len(sys.argv) != 5:
         print("usage: extractAlphaValidation.py <experiment> <scavetool_csv> <case> <run>")
         return 2
@@ -104,14 +105,14 @@ def main() -> int:
     if {"vectime", "vecvalue"}.issubset(vectors.columns):
         for _, row in vectors.iterrows():
             metric = vector_name(str(row["name"]))
-            if metric in VECTORS_TO_EXTRACT and write_metric(
+            if metric in selected_metrics and write_metric(
                 out_root, str(row["module"]), metric, row["vectime"], row["vecvalue"]
             ):
                 written += 1
     elif {"time", "value"}.issubset(vectors.columns):
         for (module_name, name), group in vectors.groupby(["module", "name"], sort=False):
             metric = vector_name(str(name))
-            if metric not in VECTORS_TO_EXTRACT:
+            if metric not in selected_metrics:
                 continue
             times = pd.to_numeric(group["time"], errors="coerce").to_numpy()
             values = pd.to_numeric(group["value"], errors="coerce").to_numpy()

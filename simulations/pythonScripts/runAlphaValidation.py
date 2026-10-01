@@ -42,6 +42,7 @@ EXPERIMENT_DIR = None
 RESULTS_DIR = None
 LOG_DIR = None
 EXPERIMENT = None
+EXTRACT_SCRIPT = SCRIPT_DIR / "extractAlphaValidation.py"
 ACTIVE_PROCESSES: set[subprocess.Popen] = set()
 ACTIVE_PROCESSES_LOCK = threading.Lock()
 
@@ -314,7 +315,7 @@ def extract_csv(entry: Entry) -> tuple[Entry, bool, int, Path]:
     exported = expected_export(entry)
     command = [
         sys.executable,
-        str(SCRIPT_DIR / "extractAlphaValidation.py"),
+        str(EXTRACT_SCRIPT),
         str(EXPERIMENT),
         str(exported),
         entry.protocol,
@@ -365,19 +366,23 @@ def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespac
         raise RuntimeError(label + " failed:\n  " + "\n  ".join(failure_lines))
 
 
-def main(number) -> int:
-    global CONFIGS, EXPERIMENT, EXPERIMENT_DIR, RESULTS_DIR, LOG_DIR
+def main(number, *, configurations=None, generate_inputs=None,
+         plot_script=None, extract_script=None) -> int:
+    """Run the common pipeline; optional inputs support a different experiment matrix."""
+    global CONFIGS, EXPERIMENT, EXPERIMENT_DIR, RESULTS_DIR, LOG_DIR, EXTRACT_SCRIPT
     EXPERIMENT = number
     EXPERIMENT_DIR = SIM_ROOT / 'experiments' / f'experiment{number}'
     RESULTS_DIR = EXPERIMENT_DIR / 'results'
     LOG_DIR = SIM_ROOT / 'logs' / f'experiment{number}'
-    CONFIGS = [(prefix, slug, f'experiment{number}_mporb_{prefix.split("_", 1)[0].lower()}.ini')
-               for prefix, slug, _ in cases(number)]
+    EXTRACT_SCRIPT = extract_script or SCRIPT_DIR / "extractAlphaValidation.py"
+    CONFIGS = configurations if configurations is not None else [
+        (prefix, slug, f'experiment{number}_mporb_{prefix.split("_", 1)[0].lower()}.ini')
+        for prefix, slug, _ in cases(number)]
     signal.signal(signal.SIGTERM, handle_termination_signal)
     args = parse_args()
     try:
         if not args.skip_generate:
-            generate(number)
+            (generate_inputs or generate)(number)
         entries = selected_entries(args)
         if not entries:
             print("no matching configs selected")
@@ -398,7 +403,9 @@ def main(number) -> int:
         if enabled(3, args):
             run_parallel("Extracting metric CSVs", extract_csv, entries, args)
         if enabled(4, args):
-            command = [sys.executable, str(SCRIPT_DIR / "plotAlphaValidation.py"), str(number), "--runs"]
+            command = ([sys.executable, str(plot_script)] if plot_script else
+                       [sys.executable, str(SCRIPT_DIR / "plotAlphaValidation.py"), str(number)])
+            command.append("--runs")
             command.extend(str(run) for run in range(1, args.runs + 1))
             command.extend(["--configs", *args.configs])
             result = subprocess.run(command, cwd=str(SCRIPT_DIR))
@@ -410,5 +417,4 @@ def main(number) -> int:
         terminate_all_active_processes()
         return 130
     return 0
-
 

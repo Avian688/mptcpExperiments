@@ -11,8 +11,15 @@ The numbered suite was reorganised on 2026-09-29. The former experiments 1
 | 4 | A/B/C topology with two waves of background connections | 5 |
 | 5 | Alpha/Beta fairness: two shared links in series and a private route | New |
 | 6 | Alpha/Beta start-order dependence on the A/B/C topology | New |
+| 7 | Two-lane parking lot: Alpha, Beta, uncoupled CUBIC and OrbCC | New |
 
 The separately named scheduler and K-shortest-path experiments retain their names.
+
+Experiment 7 duplicates OrbTCP's three-link parking lot into two disjoint lanes:
+one spine connection and three ribs, all with two subflows and `defaultCwnd`.
+It sweeps a common RTT of 20–200 ms with one-BDP queues, five runs and four CCs
+(200 simulations). See [experiment 7](experiment7/README.md) for timing,
+fairness references, plots, and the run command.
 Existing results for retained experiments move with their experiment directories.
 The old experiments' results and scripts were removed at the user's request.
 
@@ -39,7 +46,7 @@ and full feedback (`pintFeedbackProbability = 1`). This removes telemetry
 compression/sampling error, not estimator averaging, flow-count epochs, RTT or
 ACK delay. These are **exact PINT control experiments**, not Full-INT.
 
-All new tests use a 20 ms baseline propagation RTT and 10 Gbps access links.
+Experiments 1, 5 and 6 use a 20 ms baseline propagation RTT and 10 Gbps access links.
 Experiments 1 and 5 use 100 Mbps shared bottlenecks; experiment 6 uses its
 current editable NED capacity (20 Mbps). Queues have 173 packets: the ceiling of a 100 Mbps,
 20 ms BDP divided by MSS 1448 bytes. This packet budget stays fixed throughout
