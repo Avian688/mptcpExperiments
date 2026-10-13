@@ -1,118 +1,20 @@
-# MpOrbSemiCoupledAlpha scheduler comparison
+# Four-algorithm scheduler comparison
 
-Experiment 3's two-path topology, comparing the foreground connection's `default`,
-`defaultCwnd` and `intInformed` schedulers. The algorithm is **MpOrbSemiCoupledAlpha**. Five single-subflow MpOrbSemiCoupledAlpha background
-connections compete on path 2. Their scheduler stays `default` in every case.
+Current matrix: Alpha, uncoupled OrbCC, uncoupled CUBIC and Delta; five seeds
+for RTT profiles 20/20 and 60/20 ms. MpORB algorithms test default, defaultCwnd
+and intInformed; CUBIC tests the first two only (intInformed requires MpORB).
+Total: 110 simulations. Backgrounds use the same CC as the tested connection.
+Their scheduler remains default. Delta shuffle is confined to the two forward
+100 Mbps bottlenecks, with 5% budget and average-RTT intervals.
 
-## Matrix and timing
-
-- Two 100 Mbps bottlenecks; independent 10 Gbps access links.
-- RTT profiles: `equal` = 20/20 ms; `reversed` = 60/20 ms. These are propagation RTTs;
-  serialization and queueing add delay. Background propagation RTT matches path 2.
-- Three foreground schedulers × two RTT profiles × five paired seeds = **30 runs**.
-- Foreground starts at the same seeded time in 0.1–2 s for each matched case.
-- 0–40 s: foreground alone. At 40 s, all five background connections start.
-- At 80 s, background **admission** stops; already assigned data may drain.
-- Stop at **120 s**, allowing 40 s for recovery.
-- Every queue has **173 packets**: ceil(100 Mbps × 20 ms / (8 × 1448)). Keep this
-  fixed across profiles to isolate propagation delay, rather than changing RTT
-  and buffer capacity together. It is not one 60 ms BDP on the 60 ms path.
-- MSS 1448; foreground sendQueueLimit 4 MiB; initial app write 2 GB. The existing
-  transport refill mechanism maintains offered load after the write; tClose=-1s.
-- PINT probability 1; separate directional queue delay enabled; fixedAvgRTTVal=0s.
-- Alpha parameters are held constant: additive increase 0.05, eta 0.95, alpha 0.03.
-
-The RTT comparison is useful because `intInformed` uses forward-delay estimates.
-This is a comparison of the complete current schedulers, with identical unsent cwnd allowances and write-memory admission for defaultCwnd and intInformed, not an isolated measurement of the INT score's benefit.
-The current starvation threshold comes from the compiled scheduler, not this INI.
-
-**Scheduler configuration belongs on `tcp.conn-*.schedulerMode`.** The generated
-configs set both foreground endpoints there explicitly; `tcp.schedulerMode`
-would not select the scheduler. Background endpoints are explicitly `default`.
-
-## Run from the OMNeT++ checkout root
-
-Use a Python environment with numpy, pandas and matplotlib. Build the current
-MPTCP/MpORB dependencies yourself before launching. This experiment adds no C++.
+Five competitors join path 2 at 40 s and stop admission at 80 s; runs last 120 s.
+Queues remain 173 packets. Plots are separated by CC under the main experiment
+plot directory and retain scheduler, RTT, goodput, cwnd and HoL comparisons.
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0
+.venv/bin/python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --resume --skip-generate
 ```
 
-A small first check (both schedulers, equal RTT, one seed):
-
-```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 2 --runs 1 --configs Alpha_equal_default Alpha_equal_intInformed --retries 0
-```
-
-The runner generates INIs, simulates, exports, extracts, then plots. Stages have
-barriers; simulation, export and extraction use the requested core count.
-Use `--start-step 2` to reprocess existing simulations, `--end-step 1` to simulate
-only, or `--skip-generate` to preserve hand-edited INIs. `--runs N` selects seeds
-1 through N (up to five). `--sim-time-limit` is a diagnostic override; short runs
-should use `--end-step 1`, since standard summaries assume the full 120 seconds.
-
-`--resume` skips only runs with nonempty vec/sca files and a successful completion
-marker matching the INI, topology, scenario, launch command and library file
-identities. A timeout, nonzero exit or teardown abort is not marked complete.
-Raw vec/sca existence alone is insufficient. Filenames retain `-#0`.
-
-## Outputs
-
-Under `simulations/plots/experimentScheduler/`:
-
-- `goodput_comparison.png/pdf`: paired scheduler curves for each RTT profile;
-  lines are run means, bands are min/max across available runs.
-- `goodput_mean_variance.png/pdf`: mean goodput with ±1 sample standard deviation
-  bands above; sample variance across runs in Mbps² below, separately for each RTT
-  profile. Variance is undefined for a single run and omitted. Corresponding data
-  are in `goodput_time_statistics.csv`.
-- `phase_goodput.png/pdf`: individual-run points plus phase means with sample standard deviations (no bars).
-- `cwnd_comparison.png/pdf`: all three schedulers, with separate panels for each
-  RTT profile and subflow (connection creation order). Lines show the run mean;
-  bands show ±1 sample standard deviation. `cwnd_time_statistics.csv` contains
-  means, sample variances and available run counts. Uses existing cwnd vectors.
-- `phase_summary.csv`: per-run, time-weighted foreground/background goodput,
-  receiver HoL bytes and total foreground unsent send-queue bytes.
-- `phase_aggregate.csv` and `coverage.csv`: summary statistics and run coverage.
-- `rtt_<path1>ms_<path2>ms/<scheduler>/runN.png/pdf`: foreground/background goodput, per-subflow
-  cwnd, unsent queue, bytes in flight, receiver HoL and forward queueing delay.
-  Subflow labels retain connection IDs; order follows connection creation.
-
-Phase summaries cover baseline 10–40 s, competition 40–80 s and recovery 80–120 s.
-They include competition and recovery transients. Goodput is integrated as an
-interval-ending measurement; state vectors use sample-and-hold integration.
-Missing requested foreground runs are reported as an error, rather than silently
-presenting a complete comparison. Optional unavailable telemetry remains missing.
-
-Validation performed: generator/config checks, NED syntax validation, CSV
-extraction and plots using synthetic data only. No simulations or builds run.
-
-## Adding defaultCwnd to existing results
-
-To keep existing default/intInformed results, run only the ten new configurations
-through extraction, then plot all three schedulers:
-
-```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --cores 10 --retries 0 --configs Alpha_equal_defaultCwnd Alpha_reversed_defaultCwnd --end-step 3
-python3 samples/mptcpExperiments/simulations/pythonScripts/experimentScheduler/runExperimentScheduler.py --start-step 4 --skip-generate
-```
-
-The completion fingerprint includes the whole INI, so adding configurations can
-invalidate older resume markers. Explicit selection above avoids rerunning the
-previous schedulers. Existing phase plot files are replaced with the new point
-plots when plotting runs; no existing result vectors are edited.
-
-## Algorithm and result separation
-
-The experiment now uses MpORB Alpha on all connections. Configuration and raw
-result names start with `Alpha_`; extracted CSV folders start with `alpha_`, and
-plots go to `plots/experimentScheduler/`. Existing Pressure simulation results are preserved and are not used by Alpha
-plots. Current summary plots overwrite the main experiment plot filenames; comparison plots stay directly in that folder. Per-run plots use RTT-case and
-scheduler subfolders (for example `rtt_60ms_20ms/intInformed/run1.png`), with no
-extra algorithm or iteration folder. All Alpha cases need new runs.
-`intInformed` remains the current scheduler name (`intBurst` is a C++ alias).
-
-The unequal-RTT profile is now `reversed` (path 1: 60 ms; competing path 2: 20 ms).
-Its distinct result names prevent earlier `longer` (20/60 ms) results from being
-reused or plotted under the new RTT labels. The equal case remains 20/20 ms.
+Each config is `<CC>_<equal|reversed>_<scheduler>_Run<N>` where CC is Alpha,
+OrbUncoupled, CubicUncoupled or Delta. Select prefixes without `_Run<N>` using
+`--configs`. Existing Alpha output data retain their CSV directory names.

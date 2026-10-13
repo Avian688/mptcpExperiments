@@ -43,17 +43,10 @@ QUEUE_MODULES = {
     "Path 2": "baliaresponsiveness.p2Ingress.ppp[0].queue",
 }
 
-PROTOCOLS = [
-    ("lia", "LIA"),
-    ("olia", "OLIA"),
-    ("balia", "BALIA"),
-    ("mporb", "MPORB Uncoupled"),
-    ("mporb_alpha", "MPORB Alpha"),
-    ("mporb_olia", "MPORB OLIA"),
-    ("mporb_beta", "MPORB Beta"),
-    ("mporb_epsilon", "MPORB Epsilon"),
-    ("mporb_theta", "MPORB Theta"),
-]
+PROTOCOLS = [('mporb_alpha', 'Alpha'),
+ ('mporb', 'OrbCC uncoupled'),
+ ('cubic', 'CUBIC uncoupled'),
+ ('mporb_delta', 'Delta')]
 
 
 @dataclass

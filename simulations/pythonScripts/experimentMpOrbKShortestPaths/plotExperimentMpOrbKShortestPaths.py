@@ -75,7 +75,7 @@ def aggregate(rows, metric, ks):
 
 
 def batch_label(rows):
-    return "MPORB Alpha" if rows[0]["protocol"] == "MpOrbAlpha" else "MPORB Uncoupled"
+    return {"MpOrbAlpha": "MpORB Alpha", "MpOrbUncoupled": "OrbCC uncoupled", "CubicUncoupled": "CUBIC uncoupled", "MpOrbDelta": "MpORB Delta"}[rows[0]["protocol"]]
 
 
 def pair_labels():
@@ -222,7 +222,7 @@ def plot_results(configs, timeseries=True, cores=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--batch", choices=("alpha", "uncoupled", "all"), default="all")
+    parser.add_argument("--batch", choices=("alpha", "uncoupled", "cubic", "delta", "all"), default="all")
     parser.add_argument("--no-timeseries", action="store_true")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()

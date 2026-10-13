@@ -16,9 +16,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, config_prefix
-CONFIGS = [(config_prefix(p, s), f"alpha_{p}_{s}", "experimentScheduler.ini")
-           for p in PROFILES for s in SCHEDULERS]
+from generateExperimentSchedulerIniFiles import PROFILES, PROTOCOLS, schedulers, config_prefix
+CONFIGS = [(config_prefix(p, s, cc), f"{cc.lower()}_{p}_{s}", "experimentScheduler.ini")
+           for cc in PROTOCOLS for p in PROFILES for s in schedulers(cc)]
 DEFAULT_RUNS = 5
 
 

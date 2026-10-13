@@ -3,6 +3,9 @@
 import math
 from pathlib import Path
 import random
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import PROTOCOLS, shuffle_settings
 
 SIM_ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENT_DIR = SIM_ROOT / 'experiments/experiment7'
@@ -11,12 +14,6 @@ RUNS = range(1, 6)
 CAPACITY_MBPS = 100
 MSS = 1448
 INTERVAL = 1.0
-PROTOCOLS = {
-    'Alpha': ('MpOrb', 'MpOrbSemiCoupledAlpha', 'MpORB Alpha'),
-    'Beta': ('MpOrb', 'MpOrbSemiCoupledBeta', 'MpORB Beta'),
-    'CubicUncoupled': ('MpTcp', 'MpTcpMetaCubic', 'CUBIC uncoupled'),
-    'OrbUncoupled': ('MpOrb', 'MpOrbUncoupled', 'OrbCC uncoupled'),
-}
 CONNECTIONS = ('Spine', 'Rib 1', 'Rib 2', 'Rib 3')
 CLIENTS = ('spineClient', 'ribClient[0]', 'ribClient[1]', 'ribClient[2]')
 SERVERS = ('spineServer', 'ribServer[0]', 'ribServer[1]', 'ribServer[2]')
@@ -108,6 +105,7 @@ def general(protocol):
                   f'*.{client}.app[0].dataTransferMode = "bytecount"',
                   f'*.{server}.app[0].localPort = 1000',
                   f'*.{server}.app[0].serverThreadModuleType = "tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread"']
+    lines += shuffle_settings([f'*.{q}' for q, _ in QUEUES], protocol == 'Delta')
     # Identical forward bottleneck queue implementation for all four algorithms.
     for queue, _ in QUEUES:
         lines.append(f'*.{queue}.typename = "PintQueue"')

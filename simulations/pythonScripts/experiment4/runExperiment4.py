@@ -17,22 +17,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIGS = [
-    ("CubicUncoupled", "cubic", "experiment4_cubic.ini"),
-    ("MpOrbUncoupled", "mporb", "experiment4_mporb.ini"),
-    ("MpOrbSemiCoupledAlpha", "mporb_semicoupled_alpha", "experiment4_mporb_semicoupled_alpha.ini"),
-    ("MpOrbOlia", "mporb_olia", "experiment4_mporb_olia.ini"),
-    ("MpOrbSemiCoupledBeta", "mporb_semicoupled_beta", "experiment4_mporb_semicoupled_beta.ini"),
-    ("MpOrbSemiCoupledEpsilon", "mporb_semicoupled_epsilon", "experiment4_mporb_semicoupled_epsilon.ini"),
-    ("MpOrbSemiCoupledTheta", "mporb_semicoupled_theta", "experiment4_mporb_semicoupled_theta.ini"),
-    ("LiaCoupled", "lia", "experiment4_lia.ini"),
-    ("OliaCoupled", "olia", "experiment4_olia.ini"),
-    ("BaliaCoupled", "balia", "experiment4_balia.ini"),
-]
-DEFAULT_CONFIGS = [
-    "MpOrbSemiCoupledAlpha",
-    "MpOrbSemiCoupledBeta",
-]
+CONFIGS = [('MpOrbSemiCoupledAlpha',
+  'mporb_semicoupled_alpha',
+  'experiment4_mporb_semicoupled_alpha.ini'),
+ ('MpOrbUncoupled', 'mporb', 'experiment4_mporb.ini'),
+ ('CubicUncoupled', 'cubic', 'experiment4_cubic.ini'),
+ ('MpOrbSemiCoupledDelta',
+  'mporb_semicoupled_delta',
+  'experiment4_mporb_semicoupled_delta.ini')]
+DEFAULT_CONFIGS = [item[0] for item in CONFIGS]
 DEFAULT_RUNS = 5
 
 

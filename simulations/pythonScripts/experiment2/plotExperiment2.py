@@ -27,17 +27,10 @@ from plotHelpers import (
     target_closeness,
 )
 
-PROTOCOLS = [
-    ("mporb", "MPORB Uncoupled"),
-    ("mporb_semicoupled_alpha", "Alpha"),
-    ("mporb_olia", "MPORB OLIA"),
-    ("mporb_semicoupled_beta", "Beta"),
-    ("mporb_semicoupled_epsilon", "Epsilon"),
-    ("mporb_semicoupled_theta", "Theta"),
-    ("lia", "LIA"),
-    ("olia", "OLIA"),
-    ("balia", "BALIA"),
-]
+PROTOCOLS = [('mporb_semicoupled_alpha', 'Alpha'),
+ ('mporb', 'OrbCC uncoupled'),
+ ('cubic', 'CUBIC uncoupled'),
+ ('mporb_semicoupled_delta', 'Delta')]
 USERS = [
     ("A", 0, "shared paths 1-4"),
     ("B", 1, "shared 1-2, private 5-6"),

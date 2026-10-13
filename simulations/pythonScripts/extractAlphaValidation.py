@@ -9,8 +9,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from alphaValidation import METRICS, BETA_METRICS
-VECTORS_TO_EXTRACT = set(METRICS + BETA_METRICS)
+from alphaValidation import METRICS
+VECTORS_TO_EXTRACT = set(METRICS)
 
 
 def parse_if_number(value: str):

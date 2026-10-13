@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import math
+import re
 import random
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import shuffle_settings
 
 MSS_BYTES = 1448
-PATH_MBPS = 20
+PATH_MBPS = float(re.search(r'datarate\s*=\s*([\d.]+)Mbps',
+    (Path(__file__).resolve().parents[2] / 'experiments/experiment3/baliaresponsiveness.ned').read_text())[1])
 PATH_RTT_MS = 20
 BACKGROUND_FLOW_COUNT = 5
 BACKGROUND_INITIAL_SSTHRESH_BYTES = 40_000
@@ -17,62 +22,22 @@ SIM_TIME_LIMIT_S = 200
 RUNS = range(1, 6)
 START_RANDOM_SEED = 4999
 
-PROTOCOLS = {
-    "lia": {
-        "config": "LiaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpLia",
-        "description": "LIA",
-    },
-    "olia": {
-        "config": "OliaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpOlia",
-        "description": "OLIA",
-    },
-    "balia": {
-        "config": "BaliaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpBalia",
-        "description": "BALIA",
-    },
-    "mporb": {
-        "config": "MpOrbUncoupled",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbUncoupled",
-        "description": "MPORB Uncoupled",
-    },
-    "mporb_alpha": {
-        "config": "MpOrbAlpha",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledAlpha",
-        "description": "MPORB Alpha",
-    },
-    "mporb_olia": {
-        "config": "MpOrbOlia",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbOlia",
-        "description": "MPORB OLIA",
-    },
-    "mporb_beta": {
-        "config": "MpOrbBeta",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledBeta",
-        "description": "MPORB Beta",
-    },
-    "mporb_epsilon": {
-        "config": "MpOrbEpsilon",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledEpsilon",
-        "description": "MPORB Epsilon",
-    },
-    "mporb_theta": {
-        "config": "MpOrbTheta",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledTheta",
-        "description": "MPORB Theta",
-    },
-}
+PROTOCOLS = {'mporb_alpha': {'config': 'MpOrbAlpha',
+                 'tcp_type': 'MpOrb',
+                 'algorithm_class': 'MpOrbSemiCoupledAlpha',
+                 'description': 'MpORB Alpha'},
+ 'mporb': {'config': 'MpOrbUncoupled',
+           'tcp_type': 'MpOrb',
+           'algorithm_class': 'MpOrbUncoupled',
+           'description': 'OrbCC uncoupled'},
+ 'cubic': {'config': 'CubicUncoupled',
+           'tcp_type': 'MpTcp',
+           'algorithm_class': 'MpTcpMetaCubic',
+           'description': 'CUBIC uncoupled'},
+ 'mporb_delta': {'config': 'MpOrbDelta',
+                 'tcp_type': 'MpOrb',
+                 'algorithm_class': 'MpOrbSemiCoupledDelta',
+                 'description': 'MpORB Delta'}}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
@@ -193,8 +158,9 @@ def write_common_general(write) -> None:
         "**.tcp.updatedSackEnabled = true",
         "*.client[0].tcp.sendQueueLimit = 4MiB",
         "*.server[0].tcp.sendQueueLimit = 4MiB",
-        "*.client[0].tcp.conn-*.schedulerMode = \"default\"",
-        "*.server[0].tcp.conn-*.schedulerMode = \"default\"",
+        "*.client[0].tcp.conn-*.schedulerMode = \"defaultCwnd\"",
+        "*.server[0].tcp.conn-*.schedulerMode = \"defaultCwnd\"",
+        '**.schedulerMode = "defaultCwnd"',
         "",
         "**.goodputInterval = 0.5s",
         "**.throughputInterval = 0.5s",
@@ -221,30 +187,12 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.mpOrbOliaPathPrice.statistic-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaPathOpportunity.statistic-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaAlphaAi.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUncoupledAi.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeight.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightCorrection.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaSmoothedU.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUtilizationError.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRateShare.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaBaselineShare.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRedistributionActive.statistic-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightedAi.statistic-recording = true",
         "**.**.tcp.conn-*.additiveIncrease.statistic-recording = true",
         "**.**.tcp.conn-*.U.statistic-recording = true",
         "**.**.tcp.conn-*.holBlockedBytes.statistic-recording = true",
         "**.**.tcp.conn-*.subflowSendQueueBytes.statistic-recording = true",
         "**.**.tcp.conn-*.metaReinjectedBytes.statistic-recording = true",
         "**.**.tcp.conn-*.metaReinjections.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonPathCost.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaFairRate.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaHeadroomRate.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaAiShare.statistic-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate.statistic-recording = true",
         "**.**.tcp.conn-*.throughput:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.cwnd:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.cwndLimited:vector(removeRepeats).vector-recording = true",
@@ -264,30 +212,12 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.mpOrbOliaPathPrice:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaPathOpportunity:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaAlphaAi:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUncoupledAi:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeight:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightCorrection:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaSmoothedU:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUtilizationError:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaBaselineShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRedistributionActive:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightedAi:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.additiveIncrease:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.U:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.holBlockedBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.subflowSendQueueBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonPathCost:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaFairRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaHeadroomRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaAiShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
         "**.p1Ingress.ppp[0].queue.queueLength.statistic-recording = true",
         "**.p2Ingress.ppp[0].queue.queueLength.statistic-recording = true",
@@ -316,6 +246,8 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'*.backgroundClient[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
+    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] == "MpOrbSemiCoupledDelta"):
+        write(line)
     if is_mporb:
         write("# Specific PintQueue assignments must precede the broad fallback.")
         write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
@@ -348,8 +280,6 @@ def write_config(write, settings: dict[str, str], run: int) -> None:
 
 
 def main() -> None:
-    if bdp_packets() != 35:
-        raise RuntimeError(f"unexpected BDP packet count: {bdp_packets()}")
 
     EXPERIMENT_DIR.mkdir(parents=True, exist_ok=True)
     for protocol, settings in PROTOCOLS.items():
@@ -362,6 +292,7 @@ def main() -> None:
             write_protocol_settings(write, protocol, settings)
             for run in RUNS:
                 write_config(write, settings, run)
+        out_path.write_text(out_path.read_text().rstrip() + "\n")
         print(f"Generated {out_path}.")
 
 

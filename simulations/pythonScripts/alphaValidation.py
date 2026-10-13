@@ -8,6 +8,7 @@ from pathlib import Path
 import random
 import re
 import xml.etree.ElementTree as ET
+from experimentProtocols import PROTOCOLS, shuffle_settings
 
 SIM_ROOT = Path(__file__).resolve().parents[1]
 RUNS = range(1, 6)
@@ -22,12 +23,6 @@ METRICS = (
     'queueLength', 'bandwidth', 'numberOfFlows', 'pintLocalUtilization',
     'cwndLimited', 'retransmissionRate',
 )
-BETA_METRICS = (
-    'mpOrbBetaWeight', 'mpOrbBetaWeightCorrection', 'mpOrbBetaSmoothedU',
-    'mpOrbBetaUtilizationError', 'mpOrbBetaRateShare', 'mpOrbBetaBaselineShare',
-    'mpOrbBetaRedistributionActive', 'mpOrbBetaAlphaAi',
-    'mpOrbBetaUncoupledAi', 'mpOrbBetaWeightedAi',
-)
 NETWORKS = {1: 'busyPaths', 5: 'fairnessPaths', 6: 'sharedleopaths'}
 DURATIONS = {1: 240, 5: 300, 6: 300}
 USER_PATHS = {
@@ -38,7 +33,7 @@ USER_PATHS = {
 
 
 def protocols(number):
-    return ('Alpha', 'Beta') if number in (5, 6) else ('Alpha',)
+    return tuple(PROTOCOLS)
 
 
 def cases(number, protocol=None):
@@ -47,7 +42,7 @@ def cases(number, protocol=None):
     if protocol not in protocols(number):
         raise ValueError(f'Unsupported protocol for experiment {number}: {protocol}')
     if number == 1:
-        return [(f'Alpha_Rtt20_{rtt}', f'rtt20_{rtt}', f'RTT (20, {rtt}) ms')
+        return [(f'{protocol}_Rtt20_{rtt}', f'{protocol.lower()}_rtt20_{rtt}', f'RTT (20, {rtt}) ms')
                 for rtt in RTTS_MS]
     if number == 5:
         scenarios = [('Fairness', 'fairness', 'Two shared links and a private route')]
@@ -58,8 +53,8 @@ def cases(number, protocol=None):
             ('BCFirst', 'B and C start before A'))]
     else:
         raise ValueError(f'Unsupported MpORB experiment: {number}')
-    # Preserve existing Alpha paths; Beta outputs must never overwrite them.
-    return [(f'{protocol}_{name}', slug if protocol == 'Alpha' else f'beta_{slug}', title)
+    # Preserve Alpha output paths; each other CC gets a separate directory.
+    return [(f'{protocol}_{name}', slug if protocol == 'Alpha' else f'{protocol.lower()}_{slug}', title)
             for name, slug, title in scenarios]
 
 
@@ -99,7 +94,7 @@ def general(number, protocol='Alpha'):
         '*.configurator.config = xml("<config><interface hosts=\'**\' address=\'10.x.x.x\' netmask=\'255.x.x.x\'/><autoroute metric=\'delay\'/></config>")',
         '*.configurator.addDefaultRoutes = false', '*.configurator.addSubnetRoutes = false',
         '*.configurator.optimizeRoutes = false',
-        '**.tcp.typename = "MpOrb"', f'**.tcp.tcpAlgorithmClass = "MpOrbSemiCoupled{protocol}"',
+        f'**.tcp.typename = "{PROTOCOLS[protocol][0]}"', f'**.tcp.tcpAlgorithmClass = "{PROTOCOLS[protocol][1]}"',
         '**.schedulerMode = "defaultCwnd"', '**.startAllSubflowsAtBeginning = true',
         '**.subflowStartTimes = ""', '**.tcp.advertisedWindow = 200000000',
         '**.tcp.windowScalingSupport = true', '**.tcp.windowScalingFactor = -1',
@@ -151,6 +146,7 @@ def general(number, protocol='Alpha'):
         lines += ['*.privateIngress.ppp[0].queue.packetCapacity = 35']
     else:
         queues = [f'router1[{i}].ppp[{2 if i < 4 else 1}]' for i in range(8)]
+    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol == 'Delta')
     for queue in queues:
         lines += [f'*.{queue}.queue.typename = "PintQueue"']
     lines += [
@@ -161,7 +157,7 @@ def general(number, protocol='Alpha'):
         '**.ppp[*].queue.packetCapacity = 173',
         '**.tcp.conn-temp.**.statistic-recording = false',
     ]
-    for metric in METRICS + (BETA_METRICS if protocol == 'Beta' else ()):
+    for metric in METRICS:
         if metric in ('queueLength', 'bandwidth', 'numberOfFlows', 'pintLocalUtilization'):
             scopes = [f'*.{queue}.queue' for queue in queues]
         elif metric == 'goodput':

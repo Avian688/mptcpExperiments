@@ -5,6 +5,9 @@ from __future__ import annotations
 import math
 import random
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import PROTOCOLS, shuffle_settings
 
 MSS_BYTES = 1448
 PATH_MBPS = 100
@@ -210,8 +213,13 @@ SCHEDULERS = ("default", "defaultCwnd", "intInformed")
 METRICS = ['goodput', 'throughput', 'cwnd', 'mbytesInFlight', 'retransmissionRate', 'numRtos', 'holBlockedBytes', 'subflowSendQueueBytes', 'metaReinjectedBytes', 'metaReinjections', 'mpOrbForwardQueueingDelay', 'mpOrbReverseQueueingDelay', 'intSchedulerScore', 'intSchedulerBurstBytes', 'intSchedulerFreshFeedback', 'intSchedulerProbe', 'queueLength']
 
 
-def config_prefix(profile, scheduler):
-    return f"Alpha_{profile}_{scheduler}"
+def config_prefix(profile, scheduler, protocol='Alpha'):
+    return f"{protocol}_{profile}_{scheduler}"
+
+
+def schedulers(protocol):
+    # intInformed is implemented by MpOrbConnection, not MpTcpConnection.
+    return SCHEDULERS if protocol != 'CubicUncoupled' else SCHEDULERS[:2]
 
 
 def main():
@@ -220,8 +228,6 @@ def main():
     write = lambda line="": lines.append(line)
     write_common_general(write)
     write('# Fixed 173-packet queues: one 100 Mbps / 20 ms BDP in both RTT profiles.')
-    write('**.tcp.typename = "MpOrb"')
-    write('**.tcp.tcpAlgorithmClass = "MpOrbSemiCoupledAlpha"')
     write('*.backgroundClient[*].tcp.conn-*.schedulerMode = "default"')
     write('*.backgroundServer[*].tcp.conn-*.schedulerMode = "default"')
     write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
@@ -234,28 +240,33 @@ def main():
     write('**.fixedAvgRTTVal = 0s')
     write('**.pintFeedbackProbability = 1')
     write('**.pintSeparateQueueingDelay = true')
-    for profile, (rtt1, rtt2) in PROFILES.items():
-        for scheduler in SCHEDULERS:
-            for run in RUNS:
-                config = f"{config_prefix(profile, scheduler)}_Run{run}"
-                write()
-                write(f'[Config {config}]')
-                write(f'description = "MpOrbSemiCoupledAlpha; {scheduler}; RTT {rtt1}/{rtt2} ms; run {run}"')
-                write(f'seed-set = {run}')
-                write(f'*.path1Rtt = {rtt1}ms')
-                write(f'*.path2Rtt = {rtt2}ms')
-                write(f'*.client[0].tcp.conn-*.schedulerMode = "{scheduler}"')
-                write(f'*.server[0].tcp.conn-*.schedulerMode = "{scheduler}"')
-                start = flow_start_time(run)
-                write(f'*.client[0].app[0].tOpen = {start:.6f}s')
-                write(f'*.client[0].app[0].tSend = {start:.6f}s')
-                write('*.backgroundClient[*].app[0].tOpen = 40s')
-                write('*.backgroundClient[*].app[0].tSend = 40s')
-                write(f'output-vector-file = "results/{config}-#0.vec"')
-                write(f'output-scalar-file = "results/{config}-#0.sca"')
+    for protocol in PROTOCOLS:
+        for profile, (rtt1, rtt2) in PROFILES.items():
+            for scheduler in schedulers(protocol):
+                for run in RUNS:
+                    config = f"{config_prefix(profile, scheduler, protocol)}_Run{run}"
+                    write()
+                    write(f'[Config {config}]')
+                    write(f'description = "{protocol}; {scheduler}; RTT {rtt1}/{rtt2} ms; run {run}"')
+                    write(f'**.tcp.typename = "{PROTOCOLS[protocol][0]}"')
+                    write(f'**.tcp.tcpAlgorithmClass = "{PROTOCOLS[protocol][1]}"')
+                    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], protocol == 'Delta'):
+                        write(line)
+                    write(f'seed-set = {run}')
+                    write(f'*.path1Rtt = {rtt1}ms')
+                    write(f'*.path2Rtt = {rtt2}ms')
+                    write(f'*.client[0].tcp.conn-*.schedulerMode = "{scheduler}"')
+                    write(f'*.server[0].tcp.conn-*.schedulerMode = "{scheduler}"')
+                    start = flow_start_time(run)
+                    write(f'*.client[0].app[0].tOpen = {start:.6f}s')
+                    write(f'*.client[0].app[0].tSend = {start:.6f}s')
+                    write('*.backgroundClient[*].app[0].tOpen = 40s')
+                    write('*.backgroundClient[*].app[0].tSend = 40s')
+                    write(f'output-vector-file = "results/{config}-#0.vec"')
+                    write(f'output-scalar-file = "results/{config}-#0.sca"')
     path = EXPERIMENT_DIR / 'experimentScheduler.ini'
     path.write_text("\n".join(lines) + "\n")
-    print(f"Generated {path}: {len(PROFILES) * len(SCHEDULERS) * len(RUNS)} configurations, {bdp_packets()} packets per queue")
+    print(f"Generated {path}: {len(PROFILES) * sum(len(schedulers(p)) for p in PROTOCOLS) * len(RUNS)} configurations, {bdp_packets()} packets per queue")
 
 
 if __name__ == '__main__':

@@ -1,17 +1,25 @@
-# MPORB Alpha and Uncoupled on saved edge-disjoint LEO paths
+> Current transport matrix: `alpha`, `uncoupled`, `cubic`, `delta` batches,
+> 125 simulations each (500 total), all using defaultCwnd. `--batch all` selects
+> all four. Delta uses 5% shuffle at physical 100 Mbps egress queues, including
+> potentially limiting access links; this LEO topology has no 10 Gbps access tier.
+> The route/ping experiment is unchanged.
 
-Two separate batches, each with 125 simulations: five city pairs × K=1–5 × five seeds.
-There are 250 simulations when both batches are selected. Only the
+# Four congestion controls on saved edge-disjoint LEO paths
+
+Four separate batches, each with 125 simulations: five city pairs × K=1–5 × five seeds.
+There are 500 simulations when all batches are selected. Only the
 **EdgeDisjoint** policy is included; shared-link policies are deferred.
 
 | Batch | Transport and algorithm | Subflows |
 |---|---|---|
 | `alpha` | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1, 2, 3, 4, 5 |
 | `uncoupled` | `MpOrb` / `MpOrbUncoupled` | 1, 2, 3, 4, 5 |
+| `cubic` | `MpTcp` / `MpTcpMetaCubic` | 1, 2, 3, 4, 5 |
+| `delta` | `MpOrb` / `MpOrbSemiCoupledDelta` | 1, 2, 3, 4, 5 |
 
-K=1 uses the full MPORB transport with one subflow and the batch's own algorithm.
+K=1 uses the selected multipath transport with one subflow and the batch's own algorithm.
 There is no separate OrbCC baseline in this matrix. Each batch's gain heatmap
-compares K=2–5 with its own matched K=1 run. Both batches use identical seeds,
+compares K=2–5 with its own matched K=1 run. All batches use identical seeds,
 start times and routes. Rank selection always takes the first K saved RTT ranks.
 
 City pairs, in the original catalog order: San Diego–Seattle, Seattle–New York,
@@ -88,7 +96,7 @@ The common access links can limit aggregate goodput even with disjoint core link
 This is a route-count/resilience comparison without added background competition,
 not a test with K independent 100 Mbps end-to-end bottlenecks.
 
-Both transports use `PintInterface`/`PintQueue`, eight-bit utilization and flow
+All cases use `PintInterface`/`PintQueue`, eight-bit utilization and flow
 counts, the flow-count sketch, full ACK feedback, initial phase enabled, and the
 same OrbCC gains. Alpha itself is unchanged. MSS is 1200 bytes on both transports
 to leave room for TCP/PINT/MPTCP options. Fragmented TCP packets for the selected

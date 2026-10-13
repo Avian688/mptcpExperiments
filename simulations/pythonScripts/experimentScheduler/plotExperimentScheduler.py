@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, config_prefix
+from generateExperimentSchedulerIniFiles import PROFILES, SCHEDULERS, PROTOCOLS, schedulers, config_prefix
 
 SIM_ROOT = Path(__file__).resolve().parents[2]
 CSV_ROOT = SIM_ROOT / 'experiments/experimentScheduler/csvs'
@@ -79,19 +79,28 @@ def save(fig, path):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--runs', nargs='+', type=int, default=list(range(1, 6)))
-    parser.add_argument('--configs', nargs='+', default=[config_prefix(p, s) for p in PROFILES for s in SCHEDULERS])
+    parser.add_argument('--configs', nargs='+', default=[config_prefix(p, s, cc) for cc in PROTOCOLS for p in PROFILES for s in schedulers(cc)])
     args = parser.parse_args()
+    for protocol in PROTOCOLS:
+        selected = [c for c in args.configs if c.startswith(protocol + '_')]
+        if selected:
+            plot_protocol(args.runs, selected, protocol)
+
+
+def plot_protocol(runs, configs, protocol):
+    # Keep each CC comparison separate; never mix protocols in scheduler means.
+    output = OUT / protocol
     grid = np.arange(0.25, 120, 0.5)
     curves, rows, coverage = {}, [], []
     cwnd_curves = {}
     missing = []
     for profile in PROFILES:
-        for scheduler in SCHEDULERS:
-            if config_prefix(profile, scheduler) not in args.configs:
+        for scheduler in schedulers(protocol):
+            if config_prefix(profile, scheduler, protocol) not in configs:
                 continue
             group = []
-            for run in args.runs:
-                root = CSV_ROOT / f'alpha_{profile}_{scheduler}' / f'run{run}'
+            for run in runs:
+                root = CSV_ROOT / f'{protocol.lower()}_{profile}_{scheduler}' / f'run{run}'
                 main_gp = load(root, 'goodput', 'server[0].app')
                 if not main_gp:
                     missing.append(f'{profile}/{scheduler}/run{run}')
@@ -130,9 +139,9 @@ def main():
                     ax.set_xlabel('Time (s)')
                     if ax.get_legend_handles_labels()[0]:
                         ax.legend(fontsize=7)
-                fig.suptitle(f'MpORB Alpha — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
+                fig.suptitle(f'{PROTOCOLS[protocol][2]} — {scheduler}, RTT {PROFILES[profile]} ms, run {run}')
                 rtt1, rtt2 = PROFILES[profile]
-                save(fig, OUT / f'rtt_{rtt1}ms_{rtt2}ms' / scheduler / f'run{run}')
+                save(fig, output / f'rtt_{rtt1}ms_{rtt2}ms' / scheduler / f'run{run}')
                 for phase, (start, end) in PHASES.items():
                     rows.append(dict(profile=profile, scheduler=scheduler, run=run, phase=phase,
                         start_s=start, end_s=end,
@@ -142,19 +151,19 @@ def main():
                         sender_unsent_bytes=phase_mean(queues, 'subflowSendQueueBytes', start, end)))
             if group:
                 curves[profile, scheduler] = np.array(group)
-            coverage.append(dict(profile=profile, scheduler=scheduler, available_runs=len(group), requested_runs=len(args.runs)))
-    OUT.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(coverage).to_csv(OUT/'coverage.csv', index=False)
+            coverage.append(dict(profile=profile, scheduler=scheduler, available_runs=len(group), requested_runs=len(runs)))
+    output.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(coverage).to_csv(output/'coverage.csv', index=False)
     if not rows:
         raise SystemExit('No extracted goodput found; run stages 1–3 first.')
     summary = pd.DataFrame(rows)
-    summary.to_csv(OUT/'phase_summary.csv', index=False)
+    summary.to_csv(output/'phase_summary.csv', index=False)
     summary.groupby(['profile','scheduler','phase'], sort=False)[[
         'foreground_goodput_mbps','background_goodput_mbps','receiver_hol_bytes','sender_unsent_bytes'
-    ]].agg(['mean','std','count']).to_csv(OUT/'phase_aggregate.csv')
+    ]].agg(['mean','std','count']).to_csv(output/'phase_aggregate.csv')
     fig, axes = plt.subplots(len(PROFILES), 1, figsize=(10, 7), squeeze=False)
     for ax, profile in zip(axes.ravel(), PROFILES):
-        for scheduler in SCHEDULERS:
+        for scheduler in schedulers(protocol):
             values = curves.get((profile, scheduler))
             if values is None:
                 continue
@@ -165,13 +174,13 @@ def main():
         decorate(ax)
         ax.legend()
     axes[-1,0].set_xlabel('Time (s); line = run mean, shading = run range')
-    save(fig, OUT/'goodput_comparison')
+    save(fig, output/'goodput_comparison')
     # Mean and sample variance across runs, at each time bin. Variance has
     # squared units; show it separately rather than adding it to the mean.
     fig, axes = plt.subplots(2, len(PROFILES), figsize=(12, 7), squeeze=False)
     stats = []
     for j, profile in enumerate(PROFILES):
-        for scheduler in SCHEDULERS:
+        for scheduler in schedulers(protocol):
             values = curves.get((profile, scheduler))
             if values is None:
                 continue
@@ -194,8 +203,8 @@ def main():
             ax.set_ylim(bottom=0)
             if ax.get_legend_handles_labels()[0]:
                 ax.legend()
-    save(fig, OUT/'goodput_mean_variance')
-    pd.DataFrame(stats).to_csv(OUT/'goodput_time_statistics.csv', index=False)
+    save(fig, output/'goodput_mean_variance')
+    pd.DataFrame(stats).to_csv(output/'goodput_time_statistics.csv', index=False)
 
     # Keep subflows separate: summing windows would hide withdrawal on one path.
     if cwnd_curves:
@@ -206,7 +215,7 @@ def main():
         for i, profile in enumerate(PROFILES):
             for j, subflow in enumerate(subflow_ids):
                 ax = axes[i, j]
-                for scheduler in SCHEDULERS:
+                for scheduler in schedulers(protocol):
                     series = cwnd_curves.get((profile, scheduler, subflow))
                     if not series:
                         continue
@@ -228,8 +237,8 @@ def main():
                 if ax.get_legend_handles_labels()[0]:
                     ax.legend()
         fig.suptitle('Cwnd: run mean ± 1 sample standard deviation')
-        save(fig, OUT/'cwnd_comparison')
-        pd.DataFrame(cwnd_stats).to_csv(OUT/'cwnd_time_statistics.csv', index=False)
+        save(fig, output/'cwnd_comparison')
+        pd.DataFrame(cwnd_stats).to_csv(output/'cwnd_time_statistics.csv', index=False)
     else:
         print('No subflow cwnd data found; cwnd comparison omitted.')
 
@@ -238,22 +247,22 @@ def main():
     for i, profile in enumerate(PROFILES):
         for j, phase in enumerate(PHASES):
             ax=axes[i,j]
-            for k, scheduler in enumerate(SCHEDULERS):
+            for k, scheduler in enumerate(schedulers(protocol)):
                 vals=summary.loc[(summary.profile==profile)&(summary.scheduler==scheduler)&(summary.phase==phase), 'foreground_goodput_mbps']
                 if len(vals):
                     offsets = np.linspace(-0.13, 0.13, len(vals)) if len(vals)>1 else np.array([0.])
                     ax.scatter(k+offsets, vals, color=COLORS[scheduler], alpha=0.45, s=22)
                     ax.errorbar(k, vals.mean(), yerr=vals.std(ddof=1) if len(vals)>1 else None,
                                 fmt='D', color=COLORS[scheduler], capsize=5, markersize=6)
-            ax.set_xticks(range(len(SCHEDULERS)), SCHEDULERS, rotation=15)
-            ax.set_xlim(-0.5, len(SCHEDULERS)-0.5)
+            ax.set_xticks(range(len(schedulers(protocol))), schedulers(protocol), rotation=15)
+            ax.set_xlim(-0.5, len(schedulers(protocol))-0.5)
             ax.set_ylim(bottom=0)
             ax.grid(axis='y', alpha=0.2)
             ax.set_title(f'{profile}: {phase}')
             ax.set_ylabel('Phase goodput (Mbps)')
     fig.suptitle('Individual runs and mean ± 1 sample standard deviation')
-    save(fig, OUT/'phase_goodput')
-    print(f'Wrote plots and summaries to {OUT}')
+    save(fig, output/'phase_goodput')
+    print(f'Wrote plots and summaries to {output}')
     if missing:
         raise SystemExit('Incomplete requested data: '+', '.join(missing))
 

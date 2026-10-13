@@ -5,6 +5,9 @@ from __future__ import annotations
 import math
 import random
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import shuffle_settings
 
 MSS_BYTES = 1448
 PATH_MBPS = 100
@@ -13,68 +16,22 @@ RUNS = range(1, 6)
 START_RANDOM_WINDOW_S = 5.0
 START_RANDOM_SEED = 2999
 
-PROTOCOLS = {
-    "cubic": {
-        "config": "CubicUncoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpMetaCubic",
-        "description": "Uncoupled MPTCP CUBIC",
-    },
-    "mporb": {
-        "config": "MpOrbUncoupled",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbUncoupled",
-        "description": "Uncoupled MPORB",
-    },
-    "mporb_semicoupled_alpha": {
-        "config": "MpOrbSemiCoupledAlpha",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledAlpha",
-        "description": "MPORB Alpha rate-share coupling",
-    },
-    "mporb_olia": {
-        "config": "MpOrbOlia",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbOlia",
-        "description": "MPORB Alpha with OLIA opportunistic shifting",
-    },
-    "mporb_semicoupled_beta": {
-        "config": "MpOrbSemiCoupledBeta",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledBeta",
-        "description": "MPORB Beta U-error redistribution around Alpha",
-    },
-    "mporb_semicoupled_epsilon": {
-        "config": "MpOrbSemiCoupledEpsilon",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledEpsilon",
-        "description": "MPORB Epsilon PINT bottleneck-price allocation",
-    },
-    "mporb_semicoupled_theta": {
-        "config": "MpOrbSemiCoupledTheta",
-        "tcp_type": "MpOrb",
-        "algorithm_class": "MpOrbSemiCoupledTheta",
-        "description": "MPORB Theta Alpha budget with PINT headroom shifting",
-    },
-    "lia": {
-        "config": "LiaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpLia",
-        "description": "Coupled MPTCP LIA",
-    },
-    "olia": {
-        "config": "OliaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpOlia",
-        "description": "Coupled MPTCP OLIA",
-    },
-    "balia": {
-        "config": "BaliaCoupled",
-        "tcp_type": "MpTcp",
-        "algorithm_class": "MpTcpBalia",
-        "description": "Coupled MPTCP BALIA",
-    },
-}
+PROTOCOLS = {'mporb_semicoupled_alpha': {'config': 'MpOrbSemiCoupledAlpha',
+                             'tcp_type': 'MpOrb',
+                             'algorithm_class': 'MpOrbSemiCoupledAlpha',
+                             'description': 'MpORB Alpha'},
+ 'mporb': {'config': 'MpOrbUncoupled',
+           'tcp_type': 'MpOrb',
+           'algorithm_class': 'MpOrbUncoupled',
+           'description': 'OrbCC uncoupled'},
+ 'cubic': {'config': 'CubicUncoupled',
+           'tcp_type': 'MpTcp',
+           'algorithm_class': 'MpTcpMetaCubic',
+           'description': 'CUBIC uncoupled'},
+ 'mporb_semicoupled_delta': {'config': 'MpOrbSemiCoupledDelta',
+                             'tcp_type': 'MpOrb',
+                             'algorithm_class': 'MpOrbSemiCoupledDelta',
+                             'description': 'MpORB Delta'}}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
@@ -181,7 +138,7 @@ def write_common_general(write) -> None:
         f"# Enter congestion avoidance at one half-path BDP ({shared_path_fair_share_packets()} MSS).",
         f"**.tcp.initialSsthresh = {shared_path_fair_share_packets() * MSS_BYTES}",
         "**.tcp.sendQueueLimit = 4MiB",
-        "**.schedulerMode = \"default\"",
+        "**.schedulerMode = \"defaultCwnd\"",
         "",
         "**.goodputInterval = 0.5s",
         "**.throughputInterval = 0.5s",
@@ -217,24 +174,6 @@ def write_common_general(write) -> None:
         "**.**.tcp.conn-*.mpOrbOliaPathPrice:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaPathOpportunity:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.mpOrbOliaNormalizedWindow:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaAlphaAi:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUncoupledAi:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeight:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightCorrection:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaSmoothedU:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaUtilizationError:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaBaselineShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaRedistributionActive:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.mpOrbBetaWeightedAi:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonPathCost:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonDesiredShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRateShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledEpsilonRedistribution:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaFairRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaHeadroomRate:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaAiShare:vector(removeRepeats).vector-recording = true",
-        "**.**.tcp.conn-*.semiCoupledThetaConnectionAiRate:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjectedBytes:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.metaReinjections:vector(removeRepeats).vector-recording = true",
         "**.**.tcp.conn-*.**.result-recording-modes = vector(removeRepeats)",
@@ -254,6 +193,8 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
+    for line in shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings["algorithm_class"] == "MpOrbSemiCoupledDelta"):
+        write(line)
     if is_mporb:
         write("# MPORB requires PINT telemetry on every forward bottleneck.")
         write("# Keep these before the broad DropTail fallback: earlier matching lines have priority in these ini files.")

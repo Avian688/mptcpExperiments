@@ -2,6 +2,7 @@
 """Experiment 2 topology with two temporary waves of fixed MPORB competitors."""
 from pathlib import Path
 import math
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -14,7 +15,7 @@ EXPERIMENT_DIR = SCRIPT_DIR.parents[1] / 'experiments' / 'experiment4'
 WAVES = ((5, 0, 30, 60), (6, 5, 30, 60), (1, 10, 90, 120), (2, 15, 90, 120))
 PROTOCOLS = base.PROTOCOLS
 RUNS = base.RUNS
-PATH_MBPS = 100
+PATH_MBPS = float(re.search(r'channel bottleneckPath.*?datarate\s*=\s*([\d.]+)Mbps', (EXPERIMENT_DIR / 'sharedleopaths.ned').read_text(), re.S)[1])
 PATH_RTT_MS = base.PATH_RTT_MS
 MSS_BYTES = base.MSS_BYTES
 
@@ -23,15 +24,15 @@ def bdp_packets():
     return math.ceil(PATH_MBPS * 1_000_000 * (PATH_RTT_MS / 1000) / (MSS_BYTES * 8))
 
 
-def background_settings():
+def background_settings(settings):
     lines = ['*.scenarioManager.script = xmldoc("conditions.xml")']
     for host in ('backgroundClient', 'backgroundServer'):
         lines += [
             f'*.{host}[*].numApps = 1',
             f'*.{host}[*].app[0].numberOfSubflows = 1',
             f'*.{host}[*].tcp.conn-*.numberOfSubflows = 1',
-            f'*.{host}[*].tcp.typename = "MpOrb"',
-            f'*.{host}[*].tcp.tcpAlgorithmClass = "MpOrbUncoupled"',
+            f'*.{host}[*].tcp.typename = "{settings["tcp_type"]}"',
+            f'*.{host}[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"',
         ]
     lines += [
         '*.backgroundClient[*].app[0].typename = "MpTcpSessionApp"',
@@ -74,14 +75,16 @@ def main():
         elif line.startswith('# Enter congestion avoidance at'):
             general[i] = '# Foreground initialSsthresh is retained from experiment 2.'
     # Specific background overrides must precede general wildcard assignments.
-    general[1:1] = background_settings()
     for protocol, settings in PROTOCOLS.items():
         lines = list(general)
-        # Backgrounds always use MPORB, including in LIA/OLIA/BALIA comparisons.
+        lines[1:1] = background_settings(settings)
+        # Background connections use the same CC as A/B/C.
         # Preserve experiment 2's bottleneck PPP indices by appending access links.
         for path in range(8):
             gate = 2 if path < 4 else 1
             lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "PintQueue"')
+
+        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] == 'MpOrbSemiCoupledDelta')
         lines += [
             f'**.tcp.typename = "{settings["tcp_type"]}"',
             f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"',
@@ -94,7 +97,7 @@ def main():
             def write(line=''):
                 lines.append(line)
             base.write_config(write, settings, run)
-        (EXPERIMENT_DIR / f'experiment4_{protocol}.ini').write_text('\n'.join(lines) + '\n')
+        (EXPERIMENT_DIR / f'experiment4_{protocol}.ini').write_text('\n'.join(lines).rstrip() + '\n')
     scenario = ET.Element('scenario')
     for stop in (60, 120):
         event = ET.SubElement(scenario, 'at', t=f'{stop}s')

@@ -15,6 +15,8 @@ from alphaValidation import SIM_ROOT, DURATIONS, USER_PATHS, cases, phases, refe
 
 COLORS = ('#2878b5', '#e47722', '#31945b')
 STEP = 0.5
+STYLES = {'Alpha': ('o', '-'), 'OrbUncoupled': ('s', '--'),
+          'CubicUncoupled': ('^', '-.'), 'Delta': ('D', ':')}
 
 
 def read(path, metric):
@@ -109,8 +111,9 @@ def dashboard(root, number, title, run, grid, goodput, output, protocol='Alpha')
     for ax, metric, scale, label in (
             (axes[2], 'cwnd', 1024, 'Cwnd (KiB)'),
             (axes[3], 'subflowSendQueueBytes', 1024, 'Unsent send queue (KiB)'),
-            (axes[5], 'mpOrbBetaWeight' if protocol == 'Beta' else 'semiCoupledAlphaRateShare',
-             1, f'{protocol} AI weight')):
+            (axes[5], 'semiCoupledAlphaRateShare' if protocol in ('Alpha', 'Delta') else 'mbytesInFlight',
+             1 if protocol in ('Alpha', 'Delta') else 1024,
+             'Alpha AI weight' if protocol in ('Alpha', 'Delta') else 'Bytes in flight (KiB)')):
         for i, name in enumerate('ABC'):
             for route, folder in zip(USER_PATHS[number][i], subflows(root, f'client[{i}]')):
                 p = folder / f'{metric}.csv'
@@ -119,7 +122,7 @@ def dashboard(root, number, title, run, grid, goodput, output, protocol='Alpha')
         ax.set_ylabel(label)
     for ax in axes:
         decorate(ax, number)
-    fig.suptitle(f'MpORB {protocol} — {title} — run {run}')
+    fig.suptitle(f'{protocol} — {title} — run {run}')
     save(fig, output / 'response')
 
     fig, axes = plt.subplots(3, 3, figsize=(15, 11))
@@ -245,7 +248,7 @@ def main(number):
         for ax in axes:
             decorate(ax, number)
             ax.set_ylim(bottom=0)
-        fig.suptitle(f'MpORB {protocol} — {title}')
+        fig.suptitle(f'{protocol} — {title}')
         save(fig, args.out_dir / slug / 'goodput_mean_variance')
     pd.DataFrame(coverage).to_csv(args.out_dir / 'coverage.csv', index=False)
     if not rows:
@@ -278,12 +281,12 @@ def main(number):
         if number == 6:
             orders = ['Together', 'AFirst', 'BCFirst']
             for protocol, group in part.groupby('protocol', sort=False):
-                group = group.assign(order=group.case.str.removeprefix('beta_'))
+                group = group.assign(order=group.case.str.removeprefix(f'{protocol.lower()}_'))
                 for i, name in enumerate('ABC'):
                     grouped = group.groupby('order')[f'{name}_final20s_mbps'].agg(['mean', 'std']).reindex(orders)
                     ax.errorbar(range(3), grouped['mean'], yerr=grouped['std'],
-                                marker='o' if protocol == 'Alpha' else 's', capsize=3,
-                                ls='-' if protocol == 'Alpha' else '--', color=COLORS[i],
+                                marker=STYLES[protocol][0], capsize=3,
+                                ls=STYLES[protocol][1], color=COLORS[i],
                                 label=f'{protocol}: {name}')
             ax.axhline(reference(number, phase)[0], color='black', ls=':', label='Ideal max–min')
             ax.set_xticks(range(3), ['Together', 'A first', 'B/C first'])
@@ -293,16 +296,17 @@ def main(number):
             ax.grid(alpha=0.2)
             ax.legend()
             continue
-        x = [int(s.split('_')[-1]) for s in slugs] if number == 1 else list(range(len(slugs)))
-        for i, name in enumerate('ABC'):
-            grouped = part.groupby('case')[f'{name}_final20s_mbps'].agg(['mean', 'std']).reindex(slugs)
-            ax.errorbar(x, grouped['mean'], yerr=grouped['std'], marker='o', capsize=3, color=COLORS[i], label=name)
-            target = reference(number, phase)[i]
+        for protocol, group in part.groupby('protocol', sort=False):
+            protocol_slugs = [slug for prefix, slug, _ in cases(number, protocol)
+                              if slug in group.case.values]
+            x = [int(slug.split('_')[-1]) for slug in protocol_slugs]
+            for i, name in enumerate('ABC'):
+                grouped = group.groupby('case')[f'{name}_final20s_mbps'].agg(['mean', 'std']).reindex(protocol_slugs)
+                ax.errorbar(x, grouped['mean'], yerr=grouped['std'],
+                            marker=STYLES[protocol][0], ls=STYLES[protocol][1],
+                            capsize=3, color=COLORS[i], label=f'{protocol}: {name}')
+        for i, target in enumerate(reference(number, phase)):
             ax.axhline(target, color=COLORS[i], ls=':', lw=0.8)
-            if number == 5:
-                ax.axhline(reference(number, phase, 'pf')[i], color=COLORS[i], ls='--', lw=0.8)
-        if number != 1:
-            ax.set_xticks(x, slugs)
         ax.set_xlabel('Path 2 RTT (ms); path 1 = 20 ms' if number == 1 else 'Case')
         ax.set_ylabel('Final 20 s goodput (Mbps)')
         ax.set_title(phase)

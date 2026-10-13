@@ -22,6 +22,8 @@ from generateExperimentKShortestPathsIni import (
 BATCHES = {
     "alpha": ("MpOrbAlpha", "MpOrbSemiCoupledAlpha"),
     "uncoupled": ("MpOrbUncoupled", "MpOrbUncoupled"),
+    "cubic": ("CubicUncoupled", "MpTcpMetaCubic"),
+    "delta": ("MpOrbDelta", "MpOrbSemiCoupledDelta"),
 }
 RUN_COUNT = 5
 PATH_COUNTS = (1, 2, 3, 4, 5)
@@ -144,7 +146,7 @@ def write_transport(f):
 **.tcp.initialSsthresh = 4800000
 **.tcp.sendQueueLimit = 4MiB
 **.tcp.subflowInterfaceBinding = false
-**.schedulerMode = "default"
+**.schedulerMode = "defaultCwnd"
 **.startAllSubflowsAtBeginning = true
 **.subflowStartTimes = ""
 **.additiveIncreasePercent = 0.05
@@ -206,7 +208,14 @@ def generate_ini(sim_time=SIM_TIME):
             f.write(f'seed-set = {c["seed"]}\n')
             f.write(f'output-vector-file = "results/{c["config"]}-#0.vec"\n')
             f.write(f'output-scalar-file = "results/{c["config"]}-#0.sca"\n')
-            f.write('**.tcp.typename = "MpOrb"\n')
+            tcp = 'MpTcp' if c['batch'] == 'cubic' else 'MpOrb'
+            f.write(f'**.tcp.typename = "{tcp}"\n')
+            # All physical links are 100 Mbps here; access links can also bottleneck.
+            fraction = 0.05 if c['batch'] == 'delta' else 0
+            for host in ('satellite', 'groundStation', 'userTerminal'):
+                f.write(f'*.{host}[*].ppp[*].queue.deltaShuffleFraction = {fraction}\n')
+            f.write('**.ppp[*].queue.deltaShuffleFraction = 0\n')
+            f.write('**.ppp[*].queue.deltaShuffleInterval = 0s\n')
             f.write(f'**.tcp.tcpAlgorithmClass = "{BATCHES[c["batch"]][1]}"\n')
             f.write(f'**.numberOfSubflows = {k}\n')
             f.write(f'**.ipv4.ip.kPathTcpPathGroup = {c["path_group"]}\n')
@@ -234,7 +243,7 @@ def generate_ini(sim_time=SIM_TIME):
                 f.write(f'{app}.startTime = 0.000002s\n{app}.stopTime = {sim_time:g}s\n')
                 f.write(f'{app}.sendInterval = 100ms\n{app}.printPing = false\n')
     MANIFEST_FILE.write_text(json.dumps(configs, indent=2) + "\n", encoding="utf-8")
-    print(f"Generated {len(configs)} configurations: 125 Alpha + 125 Uncoupled; {sim_time:g}s each")
+    print(f"Generated {len(configs)} configurations: 125 each: Alpha, Uncoupled, CUBIC, Delta; {sim_time:g}s each")
     return configs
 
 

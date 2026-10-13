@@ -19,7 +19,7 @@ ppp0/lane 1 and subflow 1 to ppp1/lane 2, with explicit remote interface address
 
 ## Matrix and timing
 
-- MpORB Alpha, MpORB Beta, uncoupled CUBIC (`MpTcpMetaCubic`), and uncoupled
+- MpORB Alpha, MpORB Delta, uncoupled CUBIC (`MpTcpMetaCubic`), and uncoupled
   OrbCC/PINT (`MpOrbUncoupled`). All connections in a run use the selected CC.
 - `defaultCwnd` for every connection and algorithm.
 - RTTs **20, 40, ..., 200 ms**, applied equally to both lanes and all connections
@@ -48,7 +48,7 @@ connection, even though the two paths within each connection are edge-disjoint.
 For ideal full-capacity connection rates, each rib obeys `Spine + Rib_i <= 200`.
 Connection max–min therefore gives **100 Mbps each**. Connection proportional
 fairness gives **50 Mbps to the spine and 150 Mbps to each rib**. These are
-reference allocations, not predictions of Alpha/Beta, and ignore protocol
+reference allocations, not predictions of Alpha/Delta, and ignore protocol
 overhead and OrbCC headroom. Aggregate application goodput can differ between
 allocations because a spine byte consumes three core links.
 
@@ -69,7 +69,7 @@ python3 samples/mptcpExperiments/simulations/pythonScripts/experiment7/runExperi
 To run just the four algorithms at 20/20 ms, retain five runs and add:
 
 ```sh
---configs Alpha_Rtt20 Beta_Rtt20 CubicUncoupled_Rtt20 OrbUncoupled_Rtt20
+--configs Alpha_Rtt20 Delta_Rtt20 CubicUncoupled_Rtt20 OrbUncoupled_Rtt20
 ```
 
 The runner generates configurations unless `--skip-generate` is supplied. It

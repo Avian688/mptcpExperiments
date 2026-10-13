@@ -14,17 +14,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-CONFIGS = [
-    ("LiaCoupled", "lia", "experiment3_lia.ini"),
-    ("OliaCoupled", "olia", "experiment3_olia.ini"),
-    ("BaliaCoupled", "balia", "experiment3_balia.ini"),
-    ("MpOrbUncoupled", "mporb", "experiment3_mporb.ini"),
-    ("MpOrbAlpha", "mporb_alpha", "experiment3_mporb_alpha.ini"),
-    ("MpOrbOlia", "mporb_olia", "experiment3_mporb_olia.ini"),
-    ("MpOrbBeta", "mporb_beta", "experiment3_mporb_beta.ini"),
-    ("MpOrbEpsilon", "mporb_epsilon", "experiment3_mporb_epsilon.ini"),
-    ("MpOrbTheta", "mporb_theta", "experiment3_mporb_theta.ini"),
-]
+CONFIGS = [('MpOrbAlpha', 'mporb_alpha', 'experiment3_mporb_alpha.ini'),
+ ('MpOrbUncoupled', 'mporb', 'experiment3_mporb.ini'),
+ ('CubicUncoupled', 'cubic', 'experiment3_cubic.ini'),
+ ('MpOrbDelta', 'mporb_delta', 'experiment3_mporb_delta.ini')]
 DEFAULT_RUNS = 5
 
 

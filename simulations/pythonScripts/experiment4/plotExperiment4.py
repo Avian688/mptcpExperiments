@@ -169,7 +169,7 @@ def heatmaps(frame, out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runs', nargs='+', type=int, default=[1, 2, 3, 4, 5])
-    parser.add_argument('--protocols', nargs='+', default=['mporb_semicoupled_alpha', 'mporb_semicoupled_beta'])
+    parser.add_argument('--protocols', nargs='+', default=[p for p, _ in PROTOCOLS])
     parser.add_argument('--csv-root', type=Path, default=HERE.parents[1]/'experiments/experiment4/csvs')
     parser.add_argument('--out-dir', type=Path, default=HERE.parents[1]/'plots/experiment4')
     parser.add_argument('--clean', action='store_true', help='Remove previous plot outputs before regenerating; keeps simulation results and extracted CSVs.')
@@ -189,7 +189,7 @@ def main():
             shutil.rmtree(args.out_dir)
     args.out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
-    for protocol, label in PROTOCOLS + [('cubic', 'CUBIC Uncoupled')]:
+    for protocol, label in PROTOCOLS:
         if protocol not in args.protocols:
             continue
         for run in args.runs:

@@ -50,14 +50,6 @@ VECTORS_TO_EXTRACT = {
     "subflowSendQueueBytes",
     "metaReinjectedBytes",
     "metaReinjections",
-    "semiCoupledEpsilonPathCost",
-    "semiCoupledEpsilonDesiredShare",
-    "semiCoupledEpsilonRateShare",
-    "semiCoupledEpsilonRedistribution",
-    "semiCoupledThetaFairRate",
-    "semiCoupledThetaHeadroomRate",
-    "semiCoupledThetaAiShare",
-    "semiCoupledThetaConnectionAiRate",
     "queueLength",
 }
 

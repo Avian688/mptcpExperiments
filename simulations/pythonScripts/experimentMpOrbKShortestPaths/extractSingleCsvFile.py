@@ -178,7 +178,7 @@ def extract_results(configs, cores=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--batch", choices=("alpha", "uncoupled", "all"), default="all")
+    parser.add_argument("--batch", choices=("alpha", "uncoupled", "cubic", "delta", "all"), default="all")
     parser.add_argument("--config", help="Extract one named run, otherwise the entire matrix")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()
