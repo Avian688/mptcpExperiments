@@ -44,9 +44,10 @@ QUEUE_MODULES = {
 }
 
 PROTOCOLS = [('mporb_alpha', 'Alpha'),
+ ('mporb_delta', 'Delta'),
+ ('mporb_omega', 'Omega'),
  ('mporb', 'OrbCC uncoupled'),
- ('cubic', 'CUBIC uncoupled'),
- ('mporb_delta', 'Delta')]
+ ('cubic', 'CUBIC uncoupled')]
 
 
 @dataclass

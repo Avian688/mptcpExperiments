@@ -26,6 +26,14 @@ PROTOCOLS = {'mporb_alpha': {'config': 'MpOrbAlpha',
                  'tcp_type': 'MpOrb',
                  'algorithm_class': 'MpOrbSemiCoupledAlpha',
                  'description': 'MpORB Alpha'},
+ 'mporb_delta': {'config': 'MpOrbDelta',
+                 'tcp_type': 'MpOrb',
+                 'algorithm_class': 'MpOrbSemiCoupledDelta',
+                 'description': 'MpORB Delta'},
+ 'mporb_omega': {'config': 'MpOrbOmega',
+                 'tcp_type': 'MpOrb',
+                 'algorithm_class': 'MpOrbOmega',
+                 'description': 'MpORB Omega'},
  'mporb': {'config': 'MpOrbUncoupled',
            'tcp_type': 'MpOrb',
            'algorithm_class': 'MpOrbUncoupled',
@@ -33,11 +41,7 @@ PROTOCOLS = {'mporb_alpha': {'config': 'MpOrbAlpha',
  'cubic': {'config': 'CubicUncoupled',
            'tcp_type': 'MpTcp',
            'algorithm_class': 'MpTcpMetaCubic',
-           'description': 'CUBIC uncoupled'},
- 'mporb_delta': {'config': 'MpOrbDelta',
-                 'tcp_type': 'MpOrb',
-                 'algorithm_class': 'MpOrbSemiCoupledDelta',
-                 'description': 'MpORB Delta'}}
+           'description': 'CUBIC uncoupled'}}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
@@ -246,7 +250,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'*.backgroundClient[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
-    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] == "MpOrbSemiCoupledDelta"):
+    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] in ("MpOrbSemiCoupledDelta", "MpOrbOmega")):
         write(line)
     if is_mporb:
         write("# Specific PintQueue assignments must precede the broad fallback.")

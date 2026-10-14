@@ -15,9 +15,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 CONFIGS = [('MpOrbAlpha', 'mporb_alpha', 'experiment3_mporb_alpha.ini'),
+ ('MpOrbDelta', 'mporb_delta', 'experiment3_mporb_delta.ini'),
+ ('MpOrbOmega', 'mporb_omega', 'experiment3_mporb_omega.ini'),
  ('MpOrbUncoupled', 'mporb', 'experiment3_mporb.ini'),
- ('CubicUncoupled', 'cubic', 'experiment3_cubic.ini'),
- ('MpOrbDelta', 'mporb_delta', 'experiment3_mporb_delta.ini')]
+ ('CubicUncoupled', 'cubic', 'experiment3_cubic.ini')]
 DEFAULT_RUNS = 5
 
 

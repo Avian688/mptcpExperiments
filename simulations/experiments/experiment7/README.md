@@ -19,12 +19,12 @@ ppp0/lane 1 and subflow 1 to ppp1/lane 2, with explicit remote interface address
 
 ## Matrix and timing
 
-- MpORB Alpha, MpORB Delta, uncoupled CUBIC (`MpTcpMetaCubic`), and uncoupled
-  OrbCC/PINT (`MpOrbUncoupled`). All connections in a run use the selected CC.
+- MpORB Alpha, MpORB Delta, MpORB Omega, uncoupled OrbCC/PINT
+  (`MpOrbUncoupled`), and uncoupled CUBIC (`MpTcpMetaCubic`). All connections in a run use the selected CC.
 - `defaultCwnd` for every connection and algorithm.
 - RTTs **20, 40, ..., 200 ms**, applied equally to both lanes and all connections
   in each case, matching the source parking-lot sweep. Baseline: 20/20 ms.
-- Five paired seeds per case: **200 simulations** in total.
+- Five paired seeds per case: **250 simulations** in total.
 - One BDP of buffering per bottleneck: `ceil(100e6 * RTT / (8 * 1448))`
   packets, from 173 at 20 ms to 1727 at 200 ms. Each lane gets its own buffer.
 - As in the source experiment, ribs start at 0, the spine starts at a seeded
@@ -66,7 +66,7 @@ From the OMNeT++ checkout root, run the full pipeline with ten workers:
 python3 samples/mptcpExperiments/simulations/pythonScripts/experiment7/runExperiment7.py --cores 10 --resume --skip-generate
 ```
 
-To run just the four algorithms at 20/20 ms, retain five runs and add:
+To run just the five algorithms at 20/20 ms, retain five runs and add:
 
 ```sh
 --configs Alpha_Rtt20 Delta_Rtt20 CubicUncoupled_Rtt20 OrbUncoupled_Rtt20
@@ -90,7 +90,7 @@ python3 samples/mptcpExperiments/simulations/pythonScripts/experiment7/plotExper
 Outputs go directly under `simulations/plots/experiment7`, with algorithm,
 RTT and run subdirectories. No bars, and no repetition-count labels on figures.
 
-- `goodput_ratio`: four-algorithm comparison versus RTT, mean ± sample SD of
+- `goodput_ratio`: five-algorithm comparison versus RTT, mean ± sample SD of
   the **per-run** ratios; ideal max–min and proportional references.
 - `goodput_by_rtt`: connection goodput versus RTT, with separate spine/rib panels.
 - Per case: `goodput_mean_variance`, mean ± SD and a sample-variance panel.

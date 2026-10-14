@@ -16,6 +16,8 @@ from parkingLot import (SIM_ROOT, PROTOCOLS, RTTS_MS, RUNS, CONNECTIONS, CLIENTS
                         SERVERS, QUEUES, INTERVAL, CAPACITY_MBPS, configurations,
                         prefix, slug, duration, measurement_start, spine_start)
 
+from experimentProtocols import CC_COLORS
+
 COLORS = ('#2878b5', '#e47722', '#31945b', '#9467bd')
 
 
@@ -179,7 +181,8 @@ def comparisons(frame, output):
     summary = summary.reset_index()
     summary.to_csv(output / 'summary.csv', index=False)
     fig, ax = plt.subplots(figsize=(8, 4))
-    for (protocol, (_, _, label)), color in zip(PROTOCOLS.items(), COLORS):
+    for protocol, (_, _, label) in PROTOCOLS.items():
+        color = CC_COLORS[protocol]
         data = summary[summary.protocol == protocol].sort_values('rtt_ms')
         if not data.empty:
             ax.errorbar(data.rtt_ms, data.goodput_ratio_mean, yerr=data.goodput_ratio_std,
@@ -194,7 +197,8 @@ def comparisons(frame, output):
 
     fig, axes = plt.subplots(2, 2, figsize=(12, 7), sharex=True)
     for ax, name, metric in zip(axes.flat, CONNECTIONS, metrics[2:]):
-        for (protocol, (_, _, label)), color in zip(PROTOCOLS.items(), COLORS):
+        for protocol, (_, _, label) in PROTOCOLS.items():
+            color = CC_COLORS[protocol]
             data = summary[summary.protocol == protocol].sort_values('rtt_ms')
             if not data.empty:
                 ax.errorbar(data.rtt_ms, data[f'{metric}_mean'], yerr=data[f'{metric}_std'],

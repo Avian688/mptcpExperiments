@@ -84,7 +84,7 @@ def main():
             gate = 2 if path < 4 else 1
             lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "PintQueue"')
 
-        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] == 'MpOrbSemiCoupledDelta')
+        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] in ('MpOrbSemiCoupledDelta', 'MpOrbOmega'))
         lines += [
             f'**.tcp.typename = "{settings["tcp_type"]}"',
             f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"',

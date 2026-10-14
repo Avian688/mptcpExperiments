@@ -1,7 +1,8 @@
 # MPTCP / MpORB experiments
 
-The transport comparison suite selects exactly four algorithms:
-**Alpha**, **OrbCC uncoupled**, **CUBIC uncoupled**, and **Delta**.
+The transport comparison suite selects five algorithms:
+**Alpha**, **Delta**, **Omega**, **OrbCC uncoupled**, then **CUBIC uncoupled**.
+This is also the plotting order. Omega is sender-side Delta with RTT-scaled underutilisation AI.
 Delta inherits Alpha and adds the existing switch shuffle. The experiment setup
 changes neither congestion-control implementation nor its gain.
 All participants in a run use its selected CC, including single-subflow backgrounds.
@@ -9,20 +10,20 @@ Numbered experiments use `defaultCwnd`. Five paired seeds are used per case.
 
 | Experiment | Setup and aim | Default simulations |
 | --- | --- | ---: |
-| 1 | A uses two busy 100 Mbps paths, B/C use one each; four competitors join path 2 at 60 s and stop admission at 120 s. Path 1 RTT is 20 ms, path 2 sweeps 20–200 ms. Tests redistribution/recovery and RTT sensitivity; 240 s. | 200 |
-| 2 | Static ABC: A=(1,2,3,4), B=(1,2,5,6), C=(3,4,7,8). Tests sharing versus private alternatives. | 20 |
-| 3 | Two 100 Mbps paths; five competitors join path 2 at 40 s and stop admission at 80 s. Tests responsiveness and HoL. | 20 |
-| 4 | ABC with background waves at 30–60 s on paths 5/6 and 90–120 s on paths 1/2. Tests redistribution between interacting connections; 150 s. | 20 |
-| 5 | A traverses two shared 100 Mbps links in series or its private 20 Mbps link; B/C each use one shared link. Tests allocation objectives; 300 s. | 20 |
-| 6 | ABC with simultaneous starts, A first, or B/C first; later arrivals join around 60 s. Tests arrival-order dependence; 300 s. | 60 |
-| 7 | Two independent three-link parking-lot lanes; spine and three ribs each have two subflows. Tests multi-bottleneck fairness over RTTs 20–200 ms. | 200 |
+| 1 | A uses two busy 100 Mbps paths, B/C use one each; four competitors join path 2 at 60 s and stop admission at 120 s. Path 1 RTT is 20 ms, path 2 sweeps 20–200 ms. Tests redistribution/recovery and RTT sensitivity; 240 s. | 250 |
+| 2 | Static ABC: A=(1,2,3,4), B=(1,2,5,6), C=(3,4,7,8). Tests sharing versus private alternatives. | 25 |
+| 3 | Two 100 Mbps paths; five competitors join path 2 at 40 s and stop admission at 80 s. Tests responsiveness and HoL. | 25 |
+| 4 | ABC with background waves at 30–60 s on paths 5/6 and 90–120 s on paths 1/2. Tests redistribution between interacting connections; 150 s. | 25 |
+| 5 | A traverses two shared 100 Mbps links in series or its private 20 Mbps link; B/C each use one shared link. Tests allocation objectives; 300 s. | 25 |
+| 6 | ABC with simultaneous starts, A first, or B/C first; later arrivals join around 60 s. Tests arrival-order dependence; 300 s. | 75 |
+| 7 | Two independent three-link parking-lot lanes; spine and three ribs each have two subflows. Tests multi-bottleneck fairness over RTTs 20–200 ms. | 250 |
 
 Experiment 5's ideal connection max–min reference is (60,60,60) Mbps;
 proportional fairness is (40,80,80). Experiment 7's references are 100 Mbps each
 for max–min versus spine=50, ribs=150 Mbps for proportional fairness.
 These are full-capacity references, not claimed properties of the algorithms.
 
-## Delta queue scope
+## Delta and Omega queue scope
 
 Only explicitly listed forward bottleneck egress queues issue shuffle:
 
@@ -33,10 +34,13 @@ Only explicitly listed forward bottleneck egress queues issue shuffle:
 - Experiment 7: the three forward core egresses in each lane.
 
 Specific Delta assignments precede the wildcard zero fallback (OMNeT++ uses the
-first matching key). Access/reverse queues issue no shuffle. Other CC cases
+first matching key). Omega uses the same allowlist for sender-side fairness feedback.
+Access/reverse queues issue no shuffle. Alpha and uncoupled CC cases
 have shuffle disabled everywhere. Delta uses a 0.05 sum-of-absolute-rate-change
 budget per link round and `deltaShuffleInterval=0s` to follow the queue average
 RTT. `deltaNeedGain` retains its queue/NED default.
+Omega retains the 0.05 coefficient scale without the switch-side hard budget.
+Both use only the chosen highest-U bottleneck feedback at the sender.
 The private route in experiment 5 is also a capacity-limiting link and participates.
 
 Experiment 4 preserves the editable NED bottleneck capacity (currently 100 Mbps),
@@ -54,7 +58,7 @@ plotting environment:
 for n in 4 5 6 7; do .venv/bin/python3 samples/mptcpExperiments/simulations/pythonScripts/experiment${n}/runExperiment${n}.py --cores 10 --resume --skip-generate || break; done
 ```
 
-This selects all four algorithms: 300 simulations total. Omit `--skip-generate`
+This selects all five algorithms: 375 simulations total. Omit `--skip-generate`
 to regenerate the checked-in inputs. Each runner covers simulation, export,
 extraction and plotting; `--cores` controls workers. Existing results are retained.
 `--resume` uses the runner's completion checks; changed inputs can invalidate old runs.
@@ -63,13 +67,13 @@ or comparison plots. Generated filenames/configs are listed by the runner module
 
 ## Separately named experiments
 
-- `experimentScheduler`: four CCs across equal/reversed RTT profiles; compares
+- `experimentScheduler`: five CCs across equal/reversed RTT profiles; compares
   default/defaultCwnd/intInformed. CUBIC uses only default/defaultCwnd because
   intInformed belongs to MpOrbConnection. 110 simulations, plots separated by CC.
   Delta shuffle is enabled only on the two forward bottlenecks.
 - `experimentKShortestPaths`: routing/ping experiment; no CC selection needed.
-- `experimentMpOrbKShortestPaths`: four batches (`alpha`, `uncoupled`, `cubic`,
-  `delta`), five city pairs, K=1–5, five seeds: 500 simulations. Uses defaultCwnd.
+- `experimentMpOrbKShortestPaths`: five batches (`alpha`, `delta`, `omega`, `uncoupled`,
+  `cubic`), five city pairs, K=1–5, five seeds: 500 simulations. Uses defaultCwnd.
   Unlike the fixed topologies, all LEO physical links are 100 Mbps, including
   access links; all physical egress queues are potential bottlenecks. Delta is
   enabled on satellite/ground-station/terminal PPP queues with a zero fallback.
@@ -81,3 +85,12 @@ Runner wall-clock timeout defaults to five hours (18,000 s), overridable with
 `--sim-timeout-seconds` or `EXPERIMENT_SIM_TIMEOUT_SECONDS`. Simulation durations
 are unchanged. Allocation comparisons use separate connection panels and consistent
 algorithm colours; means and sample SD are computed across repetitions.
+
+## Plot comparisons
+
+Experiment 4 wraps the uncoupled CC labels and uses wider heatmap panels.
+Experiment 6 writes `allocation_comparison_Together`, `allocation_comparison_AFirst`,
+and `allocation_comparison_BCFirst` (PNG/PDF), replacing the old combined allocation
+plot. Each figure shows separate A/B/C panels, individual runs and mean ± sample
+SD, with the same goodput scale across arrival cases. All CC comparisons follow
+the order above. Experiment 7 retains its layout and plots all five algorithms.

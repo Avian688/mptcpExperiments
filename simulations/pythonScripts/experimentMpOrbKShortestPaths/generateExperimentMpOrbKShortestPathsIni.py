@@ -21,9 +21,10 @@ from generateExperimentKShortestPathsIni import (
 
 BATCHES = {
     "alpha": ("MpOrbAlpha", "MpOrbSemiCoupledAlpha"),
+    "delta": ("MpOrbDelta", "MpOrbSemiCoupledDelta"),
+    "omega": ("MpOrbOmega", "MpOrbOmega"),
     "uncoupled": ("MpOrbUncoupled", "MpOrbUncoupled"),
     "cubic": ("CubicUncoupled", "MpTcpMetaCubic"),
-    "delta": ("MpOrbDelta", "MpOrbSemiCoupledDelta"),
 }
 RUN_COUNT = 5
 PATH_COUNTS = (1, 2, 3, 4, 5)
@@ -211,7 +212,7 @@ def generate_ini(sim_time=SIM_TIME):
             tcp = 'MpTcp' if c['batch'] == 'cubic' else 'MpOrb'
             f.write(f'**.tcp.typename = "{tcp}"\n')
             # All physical links are 100 Mbps here; access links can also bottleneck.
-            fraction = 0.05 if c['batch'] == 'delta' else 0
+            fraction = 0.05 if c['batch'] in ('delta', 'omega') else 0
             for host in ('satellite', 'groundStation', 'userTerminal'):
                 f.write(f'*.{host}[*].ppp[*].queue.deltaShuffleFraction = {fraction}\n')
             f.write('**.ppp[*].queue.deltaShuffleFraction = 0\n')

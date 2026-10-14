@@ -28,9 +28,10 @@ from plotHelpers import (
 )
 
 PROTOCOLS = [('mporb_semicoupled_alpha', 'Alpha'),
+ ('mporb_semicoupled_delta', 'Delta'),
+ ('mporb_omega', 'Omega'),
  ('mporb', 'OrbCC uncoupled'),
- ('cubic', 'CUBIC uncoupled'),
- ('mporb_semicoupled_delta', 'Delta')]
+ ('cubic', 'CUBIC uncoupled')]
 USERS = [
     ("A", 0, "shared paths 1-4"),
     ("B", 1, "shared 1-2, private 5-6"),

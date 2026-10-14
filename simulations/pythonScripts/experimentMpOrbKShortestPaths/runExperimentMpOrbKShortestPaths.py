@@ -263,7 +263,7 @@ def parse_args():
                         help="Maximum workers for simulations, CSV exports, extraction, and plotting")
     parser.add_argument("--retries", type=int, default=1)
     parser.add_argument("--sim-timeout-seconds", type=float, default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(5 * 3600))))
-    parser.add_argument("--batch", choices=("alpha", "uncoupled", "cubic", "delta", "all"), default="all",
+    parser.add_argument("--batch", choices=("alpha", "delta", "omega", "uncoupled", "cubic", "all"), default="all",
                         help="Protocol batch (default: all); each batch includes K=1..5")
     parser.add_argument("--configs", nargs="+", help="Exact configuration names to run or process")
     parser.add_argument("--runs", nargs="+", type=int, choices=range(1, 6), help="Restrict run numbers (default all five)")

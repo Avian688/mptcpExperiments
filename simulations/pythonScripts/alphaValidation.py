@@ -146,7 +146,7 @@ def general(number, protocol='Alpha'):
         lines += ['*.privateIngress.ppp[0].queue.packetCapacity = 35']
     else:
         queues = [f'router1[{i}].ppp[{2 if i < 4 else 1}]' for i in range(8)]
-    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol == 'Delta')
+    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol in ('Delta', 'Omega'))
     for queue in queues:
         lines += [f'*.{queue}.queue.typename = "PintQueue"']
     lines += [

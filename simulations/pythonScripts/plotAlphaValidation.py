@@ -13,10 +13,12 @@ import pandas as pd
 
 from alphaValidation import SIM_ROOT, DURATIONS, USER_PATHS, cases, phases, reference
 
+from experimentProtocols import CC_LABELS, CC_COLORS
+
 COLORS = ('#2878b5', '#e47722', '#31945b')
 STEP = 0.5
 STYLES = {'Alpha': ('o', '-'), 'OrbUncoupled': ('s', '--'),
-          'CubicUncoupled': ('^', '-.'), 'Delta': ('D', ':')}
+          'CubicUncoupled': ('^', '-.'), 'Delta': ('D', ':'), 'Omega': ('P', '-')}
 
 
 def read(path, metric):
@@ -111,9 +113,9 @@ def dashboard(root, number, title, run, grid, goodput, output, protocol='Alpha')
     for ax, metric, scale, label in (
             (axes[2], 'cwnd', 1024, 'Cwnd (KiB)'),
             (axes[3], 'subflowSendQueueBytes', 1024, 'Unsent send queue (KiB)'),
-            (axes[5], 'semiCoupledAlphaRateShare' if protocol in ('Alpha', 'Delta') else 'mbytesInFlight',
-             1 if protocol in ('Alpha', 'Delta') else 1024,
-             'Alpha AI weight' if protocol in ('Alpha', 'Delta') else 'Bytes in flight (KiB)')):
+            (axes[5], 'semiCoupledAlphaRateShare' if protocol in ('Alpha', 'Delta', 'Omega') else 'mbytesInFlight',
+             1 if protocol in ('Alpha', 'Delta', 'Omega') else 1024,
+             'Alpha AI weight' if protocol in ('Alpha', 'Delta', 'Omega') else 'Bytes in flight (KiB)')):
         for i, name in enumerate('ABC'):
             for route, folder in zip(USER_PATHS[number][i], subflows(root, f'client[{i}]')):
                 p = folder / f'{metric}.csv'
@@ -188,11 +190,62 @@ def settling(values, target, grid, start, end):
 
 
 
+def arrival_allocation_comparisons(frame, output):
+    """Separate arrival cases; show each run and mean ± SD on common axes."""
+    output.mkdir(parents=True, exist_ok=True)
+    for suffix in ('png', 'pdf'):
+        (output / f'allocation_comparison.{suffix}').unlink(missing_ok=True)
+    protocols = [p for p in CC_LABELS if p in set(frame.protocol)]
+    frame = frame.copy()
+    frame['order'] = [case.removeprefix(f'{protocol.lower()}_')
+                      for case, protocol in zip(frame.case, frame.protocol)]
+    target = reference(6, 'All connections active')
+    # Include error bars, all runs and targets; keep the same y scale in all figures.
+    upper = max(target)
+    for name in 'ABC':
+        metric = f'{name}_final20s_mbps'
+        stats = frame.groupby(['order', 'protocol'])[metric].agg(['mean', 'std', 'max'])
+        candidates = pd.concat([stats['max'], stats['mean'] + stats['std'].fillna(0)]).dropna()
+        if not candidates.empty:
+            upper = max(upper, candidates.max())
+    for order, title in [('Together', 'Together'), ('AFirst', 'A first'), ('BCFirst', 'B/C first')]:
+        part = frame[frame.order == order]
+        if part.empty:
+            continue
+        fig, axes = plt.subplots(1, 3, figsize=(16, 5.5), sharey=True)
+        for i, (ax, name) in enumerate(zip(axes, 'ABC')):
+            for j, protocol in enumerate(protocols):
+                values = part.loc[part.protocol == protocol, f'{name}_final20s_mbps'].dropna().to_numpy()
+                if not len(values):
+                    continue
+                color = CC_COLORS[protocol]
+                jitter = np.linspace(-.10, .10, len(values)) if len(values) > 1 else [0]
+                ax.scatter(j + np.asarray(jitter), values, color=color, alpha=.35, s=25)
+                sd = values.std(ddof=1) if len(values) > 1 else 0
+                ax.errorbar(j, values.mean(), yerr=sd, fmt='o', color=color, ms=8, capsize=5)
+            ax.axhline(target[i], color='#555555', ls='--', lw=1.2)
+            ax.set(xticks=range(len(protocols)),
+                   xticklabels=[CC_LABELS[p].replace(' uncoupled', '\nuncoupled') for p in protocols],
+                   xlim=(-.5, len(protocols)-.5), ylim=(0, upper * 1.12), title=f'Connection {name}')
+            ax.tick_params(axis='x', labelsize=10, pad=8)
+            ax.grid(axis='y', alpha=.2)
+            ax.spines[['top', 'right']].set_visible(False)
+        axes[0].set_ylabel('Final 20 s goodput (Mbps)')
+        fig.suptitle(f'ABC allocation — {title}', fontsize=16)
+        fig.text(.5, .89, 'Faint dots: individual runs • Solid dots and whiskers: mean ± sample SD • Dashed line: ideal max–min',
+                 ha='center', fontsize=10)
+        fig.tight_layout(rect=(0, 0, 1, .85))
+        for suffix in ('png', 'pdf'):
+            fig.savefig(output / f'allocation_comparison_{order}.{suffix}', dpi=180, bbox_inches='tight')
+        plt.close(fig)
+
+
 def allocation_comparison(frame, number, output):
     """One connection per panel, algorithm colours shared across all panels."""
-    labels = {'Alpha': 'Alpha', 'OrbUncoupled': 'OrbCC uncoupled',
-              'CubicUncoupled': 'CUBIC uncoupled', 'Delta': 'Delta'}
-    palette = dict(zip(labels, ('#0072B2', '#009E73', '#D55E00', '#CC79A7')))
+    if number == 6:
+        return arrival_allocation_comparisons(frame, output)
+    labels = CC_LABELS
+    palette = CC_COLORS
     protocols = [p for p in labels if p in set(frame.protocol)]
     phase_names = [name for _, _, name in phases(number)]
     fig, axes = plt.subplots(len(phase_names), 3,
@@ -216,14 +269,6 @@ def allocation_comparison(frame, number, output):
                                 yerr=values.std(ddof=1) if len(values) > 1 else None,
                                 fmt='o', color=color, capsize=4, ms=7,
                                 label=labels[protocol], zorder=3)
-                elif number == 6:
-                    group['order'] = group.case.str.removeprefix(f'{protocol.lower()}_')
-                    stats = group.groupby('order')[metric].agg(['mean', 'std']).reindex(
-                        ['Together', 'AFirst', 'BCFirst'])
-                    offset = (j - (len(protocols)-1)/2) * .15
-                    ax.errorbar(np.arange(3) + offset, stats['mean'],
-                                yerr=stats['std'], fmt=STYLES[protocol][0],
-                                color=color, capsize=3, ms=6, label=labels[protocol])
                 else:
                     group['rtt'] = group.case.str.rsplit('_', n=1).str[-1].astype(int)
                     stats = group.groupby('rtt')[metric].agg(['mean', 'std']).sort_index()
@@ -238,10 +283,6 @@ def allocation_comparison(frame, number, output):
                            ls=':', lw=1.5, label='Ideal proportional fairness', zorder=1)
                 ax.set_xticks(range(len(protocols)), [labels[p].replace(' ', '\n', 1) for p in protocols])
                 ax.set_xlim(-.5, len(protocols)-.5)
-            elif number == 6:
-                ax.set_xticks(range(3), ['Together', 'A first', 'B/C first'])
-                ax.set_xlim(-.5, 2.5)
-                ax.set_xlabel('Arrival order')
             else:
                 ax.set_xticks([20, 60, 100, 140, 180, 200])
                 ax.set_xlabel('Path 2 RTT (ms); path 1 = 20 ms')

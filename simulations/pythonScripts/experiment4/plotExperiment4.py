@@ -138,8 +138,8 @@ def phase_rows(bundle, bg):
 
 def heatmaps(frame, out):
     data = frame[frame.window == 'last_10s']
-    labels = list(dict.fromkeys(data.label))
-    fig, axes = plt.subplots(1, 3, figsize=(max(15, len(labels)*3), 6), sharey=True)
+    labels = [label for _, label in PROTOCOLS if label in set(data.label)]
+    fig, axes = plt.subplots(1, 3, figsize=(max(21, len(labels)*4.2), 7), sharey=True)
     for ax, user in zip(axes, ('A', 'B', 'C')):
         stat = data.groupby(['phase', 'label'])[f'{user}_goodput_mbps'].agg(['mean', 'std', 'count'])
         matrix = np.full((5, len(labels)), np.nan)
@@ -155,11 +155,12 @@ def heatmaps(frame, out):
                     sd = f'{s["std"]:.1f}' if s['count'] > 1 else '—'
                     ax.text(j, i, f'{s["mean"]:.1f}\n±{sd}',
                             ha='center', va='center', fontsize=11, color='black')
-        ax.set_xticks(range(len(labels)), [label.replace('MPORB ', '').replace('Uncoupled', '\nuncoupled') for label in labels], rotation=0)
+        ax.set_xticks(range(len(labels)), [label.replace(' uncoupled', '\nuncoupled') for label in labels], fontsize=10, rotation=25, ha='right', rotation_mode='anchor')
+        ax.tick_params(axis='x', pad=10)
         ax.set_yticks(range(5), [p[2] for p in PHASES])
         ax.set_title(f'Connection {user}')
     fig.suptitle('Final 10 seconds of each phase: mean ± sample SD across runs')
-    fig.subplots_adjust(bottom=0.18, top=0.88, right=0.90, wspace=0.15)
+    fig.subplots_adjust(bottom=0.28, top=0.88, right=0.90, wspace=0.18)
     fig.colorbar(im, cax=fig.add_axes((0.92, 0.28, 0.012, 0.60)), label='Goodput (Mbps)')
     fig.savefig(out/'phase_goodput.png', dpi=180)
     fig.savefig(out/'phase_goodput.pdf')

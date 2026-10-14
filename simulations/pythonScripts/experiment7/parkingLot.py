@@ -105,7 +105,7 @@ def general(protocol):
                   f'*.{client}.app[0].dataTransferMode = "bytecount"',
                   f'*.{server}.app[0].localPort = 1000',
                   f'*.{server}.app[0].serverThreadModuleType = "tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread"']
-    lines += shuffle_settings([f'*.{q}' for q, _ in QUEUES], protocol == 'Delta')
+    lines += shuffle_settings([f'*.{q}' for q, _ in QUEUES], protocol in ('Delta', 'Omega'))
     # Identical forward bottleneck queue implementation for all four algorithms.
     for queue, _ in QUEUES:
         lines.append(f'*.{queue}.typename = "PintQueue"')
@@ -156,4 +156,4 @@ def generate(number=7, directory=None):
                               f'*.{client}.app[0].tSend = {start:.6f}s']
                 lines.append('')
         (directory / ini_name(protocol)).write_text('\n'.join(lines))
-    print('Generated experiment 7: 4 algorithms x 10 RTTs x 5 runs = 200 simulations.')
+    print(f'Generated experiment 7: {len(PROTOCOLS)} algorithms x {len(RTTS_MS)} RTTs x {len(RUNS)} runs = {len(PROTOCOLS)*len(RTTS_MS)*len(RUNS)} simulations.')

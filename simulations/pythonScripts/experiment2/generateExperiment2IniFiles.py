@@ -20,6 +20,14 @@ PROTOCOLS = {'mporb_semicoupled_alpha': {'config': 'MpOrbSemiCoupledAlpha',
                              'tcp_type': 'MpOrb',
                              'algorithm_class': 'MpOrbSemiCoupledAlpha',
                              'description': 'MpORB Alpha'},
+ 'mporb_semicoupled_delta': {'config': 'MpOrbSemiCoupledDelta',
+                             'tcp_type': 'MpOrb',
+                             'algorithm_class': 'MpOrbSemiCoupledDelta',
+                             'description': 'MpORB Delta'},
+ 'mporb_omega': {'config': 'MpOrbOmega',
+                 'tcp_type': 'MpOrb',
+                 'algorithm_class': 'MpOrbOmega',
+                 'description': 'MpORB Omega'},
  'mporb': {'config': 'MpOrbUncoupled',
            'tcp_type': 'MpOrb',
            'algorithm_class': 'MpOrbUncoupled',
@@ -27,11 +35,7 @@ PROTOCOLS = {'mporb_semicoupled_alpha': {'config': 'MpOrbSemiCoupledAlpha',
  'cubic': {'config': 'CubicUncoupled',
            'tcp_type': 'MpTcp',
            'algorithm_class': 'MpTcpMetaCubic',
-           'description': 'CUBIC uncoupled'},
- 'mporb_semicoupled_delta': {'config': 'MpOrbSemiCoupledDelta',
-                             'tcp_type': 'MpOrb',
-                             'algorithm_class': 'MpOrbSemiCoupledDelta',
-                             'description': 'MpORB Delta'}}
+           'description': 'CUBIC uncoupled'}}
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
@@ -193,7 +197,7 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
-    for line in shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings["algorithm_class"] == "MpOrbSemiCoupledDelta"):
+    for line in shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings["algorithm_class"] in ("MpOrbSemiCoupledDelta", "MpOrbOmega")):
         write(line)
     if is_mporb:
         write("# MPORB requires PINT telemetry on every forward bottleneck.")
