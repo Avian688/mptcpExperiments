@@ -60,7 +60,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sim-timeout-seconds",
         type=float,
-        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(2.5 * 60 * 60))),
+        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(5 * 60 * 60))),
     )
     parser.add_argument("--sim-time-limit", help="Optional OMNeT++ sim-time-limit override, e.g. 5s.")
     parser.add_argument("--start-step", type=int, default=1, help="1=simulate, 2=export, 3=extract, 4=plot")

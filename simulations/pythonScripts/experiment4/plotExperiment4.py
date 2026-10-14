@@ -147,19 +147,19 @@ def heatmaps(frame, out):
             for j, label in enumerate(labels):
                 if (phase, label) in stat.index:
                     matrix[i, j] = stat.loc[(phase, label), 'mean']
-        im = ax.imshow(np.ma.masked_invalid(matrix), cmap='viridis', vmin=0, vmax=4 * PATH_MBPS, aspect='auto')
+        im = ax.imshow(np.ma.masked_invalid(matrix), cmap='RdYlGn', vmin=0, vmax=4 * PATH_MBPS, aspect='auto')
         for i, (_, _, phase) in enumerate(PHASES):
             for j, label in enumerate(labels):
                 if np.isfinite(matrix[i, j]):
                     s = stat.loc[(phase, label)]
                     sd = f'{s["std"]:.1f}' if s['count'] > 1 else '—'
-                    ax.text(j, i, f'{s["mean"]:.1f}\n±{sd}\nn={int(s["count"])}',
-                            ha='center', va='center', fontsize=7, color='white' if s['mean'] < 2 * PATH_MBPS else 'black')
-        ax.set_xticks(range(len(labels)), labels, rotation=60, ha='right')
+                    ax.text(j, i, f'{s["mean"]:.1f}\n±{sd}',
+                            ha='center', va='center', fontsize=11, color='black')
+        ax.set_xticks(range(len(labels)), [label.replace('MPORB ', '').replace('Uncoupled', '\nuncoupled') for label in labels], rotation=0)
         ax.set_yticks(range(5), [p[2] for p in PHASES])
         ax.set_title(f'Connection {user}')
     fig.suptitle('Final 10 seconds of each phase: mean ± sample SD across runs')
-    fig.subplots_adjust(bottom=0.28, top=0.88, right=0.90, wspace=0.15)
+    fig.subplots_adjust(bottom=0.18, top=0.88, right=0.90, wspace=0.15)
     fig.colorbar(im, cax=fig.add_axes((0.92, 0.28, 0.012, 0.60)), label='Goodput (Mbps)')
     fig.savefig(out/'phase_goodput.png', dpi=180)
     fig.savefig(out/'phase_goodput.pdf')

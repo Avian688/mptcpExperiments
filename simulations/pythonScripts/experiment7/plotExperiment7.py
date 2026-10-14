@@ -204,8 +204,12 @@ def comparisons(frame, output):
         ax.axhline(pf, color='black', ls=':', lw=.8, label='Ideal proportional fairness')
         ax.set(title=name, xlabel='Propagation RTT (ms)', ylabel='Goodput (Mbps)')
         ax.grid(alpha=.2)
-    axes.flat[0].legend(fontsize=7)
-    save(fig, output / 'goodput_by_rtt')
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='upper center', ncol=3, frameon=False, fontsize=10)
+    fig.tight_layout(rect=(0, 0, 1, .88))
+    for suffix in ('png', 'pdf'):
+        fig.savefig(output / f'goodput_by_rtt.{suffix}', dpi=180, bbox_inches='tight')
+    plt.close(fig)
 
 
 def main():

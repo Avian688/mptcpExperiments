@@ -187,6 +187,94 @@ def settling(values, target, grid, start, end):
     return np.nan
 
 
+
+def allocation_comparison(frame, number, output):
+    """One connection per panel, algorithm colours shared across all panels."""
+    labels = {'Alpha': 'Alpha', 'OrbUncoupled': 'OrbCC uncoupled',
+              'CubicUncoupled': 'CUBIC uncoupled', 'Delta': 'Delta'}
+    palette = dict(zip(labels, ('#0072B2', '#009E73', '#D55E00', '#CC79A7')))
+    protocols = [p for p in labels if p in set(frame.protocol)]
+    phase_names = [name for _, _, name in phases(number)]
+    fig, axes = plt.subplots(len(phase_names), 3,
+                             figsize=(15, 4 * len(phase_names) + 1.2),
+                             squeeze=False, sharey=True)
+    for row, phase in enumerate(phase_names):
+        part = frame[frame.phase == phase]
+        for col, name in enumerate('ABC'):
+            ax = axes[row, col]
+            metric = f'{name}_final20s_mbps'
+            for j, protocol in enumerate(protocols):
+                group = part[part.protocol == protocol].copy()
+                color = palette[protocol]
+                if number == 5:
+                    values = group[metric].dropna().to_numpy()
+                    if not len(values):
+                        continue
+                    ax.scatter(j + np.linspace(-.08, .08, len(values)), values,
+                               s=22, color=color, alpha=.35, zorder=2)
+                    ax.errorbar(j, values.mean(),
+                                yerr=values.std(ddof=1) if len(values) > 1 else None,
+                                fmt='o', color=color, capsize=4, ms=7,
+                                label=labels[protocol], zorder=3)
+                elif number == 6:
+                    group['order'] = group.case.str.removeprefix(f'{protocol.lower()}_')
+                    stats = group.groupby('order')[metric].agg(['mean', 'std']).reindex(
+                        ['Together', 'AFirst', 'BCFirst'])
+                    offset = (j - (len(protocols)-1)/2) * .15
+                    ax.errorbar(np.arange(3) + offset, stats['mean'],
+                                yerr=stats['std'], fmt=STYLES[protocol][0],
+                                color=color, capsize=3, ms=6, label=labels[protocol])
+                else:
+                    group['rtt'] = group.case.str.rsplit('_', n=1).str[-1].astype(int)
+                    stats = group.groupby('rtt')[metric].agg(['mean', 'std']).sort_index()
+                    ax.plot(stats.index, stats['mean'], marker=STYLES[protocol][0],
+                            color=color, lw=1.7, ms=4, label=labels[protocol])
+                    ax.fill_between(stats.index, stats['mean']-stats['std'],
+                                    stats['mean']+stats['std'], color=color, alpha=.10)
+            ax.axhline(reference(number, phase)[col], color='#444444', ls='--',
+                       lw=1.2, label='Ideal max–min', zorder=1)
+            if number == 5:
+                ax.axhline(reference(number, phase, 'pf')[col], color='#888888',
+                           ls=':', lw=1.5, label='Ideal proportional fairness', zorder=1)
+                ax.set_xticks(range(len(protocols)), [labels[p].replace(' ', '\n', 1) for p in protocols])
+                ax.set_xlim(-.5, len(protocols)-.5)
+            elif number == 6:
+                ax.set_xticks(range(3), ['Together', 'A first', 'B/C first'])
+                ax.set_xlim(-.5, 2.5)
+                ax.set_xlabel('Arrival order')
+            else:
+                ax.set_xticks([20, 60, 100, 140, 180, 200])
+                ax.set_xlabel('Path 2 RTT (ms); path 1 = 20 ms')
+            ax.set_title(f'Connection {name}' + (f' · {phase}' if len(phase_names)>1 else ''), fontsize=12)
+            ax.set_ylim(bottom=0)
+            ax.grid(axis='y', alpha=.2)
+            ax.spines[['top', 'right']].set_visible(False)
+            if col == 0:
+                ax.set_ylabel('Final 20 s goodput (Mbps)')
+    # Shared axes must include every connection's reference, including B/C's
+    # larger PF target; setting a limit in the first panel stops later autoscaling.
+    tops = [float(frame[f'{name}_final20s_mbps'].max()) for name in 'ABC']
+    for phase in phase_names:
+        tops.extend(reference(number, phase))
+        if number == 5:
+            tops.extend(reference(number, phase, 'pf'))
+    for ax in axes.flat:
+        for collection in ax.collections:
+            bounds = collection.get_datalim(ax.transData)
+            if np.isfinite(bounds.ymax):
+                tops.append(bounds.ymax)
+    axes[0, 0].set_ylim(0, max([v for v in tops if np.isfinite(v)] + [1]) * 1.08)
+    handles, texts = axes[0, 0].get_legend_handles_labels()
+    fig.legend(handles, texts, loc='upper center', bbox_to_anchor=(.5, .945),
+               ncol=3, frameon=False, fontsize=10)
+    fig.suptitle('Connection allocation — mean ± sample SD across runs', fontsize=15, y=.995)
+    fig.tight_layout(rect=(0, 0, 1, .84 if len(phase_names)==1 else .92))
+    output.mkdir(parents=True, exist_ok=True)
+    for suffix in ('png', 'pdf'):
+        fig.savefig(output / f'allocation_comparison.{suffix}', dpi=180, bbox_inches='tight')
+    plt.close(fig)
+
+
 def main(number):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--runs', nargs='+', type=int, default=list(range(1, 6)))
@@ -259,61 +347,7 @@ def main(number):
     numeric = frame.select_dtypes(include='number').columns.drop('run')
     frame.groupby(['case', 'phase'], sort=False)[numeric].agg(['mean', 'std', 'count']).to_csv(args.out_dir / 'phase_summary.csv')
     pd.DataFrame(stats).to_csv(args.out_dir / 'goodput_time_statistics.csv', index=False)
-    # Point/line comparisons with SD, never bar charts. RTT is the sweep axis.
-    fig, axes = plt.subplots(1, len(phases(number)), figsize=(max(9, 5*len(phases(number))), 4.5), squeeze=False)
-    for ax, (_, _, phase) in zip(axes.ravel(), phases(number)):
-        part = frame[frame.phase == phase]
-        slugs = [slug for _, slug, _ in cases(number) if slug in part.case.values]
-        if number == 5:
-            for protocol, group in part.groupby('protocol', sort=False):
-                mean = [group[f'{name}_final20s_mbps'].mean() for name in 'ABC']
-                sd = [group[f'{name}_final20s_mbps'].std() for name in 'ABC']
-                ax.errorbar(range(3), mean, yerr=sd, marker='o', capsize=3, label=protocol)
-            ax.plot(range(3), reference(number, phase), ':', color='black', label='Ideal max–min')
-            ax.plot(range(3), reference(number, phase, 'pf'), '--', color='#31945b', label='Ideal PF')
-            ax.set_xticks(range(3), list('ABC'))
-            ax.set_xlabel('Connection')
-            ax.set_ylabel('Final 20 s goodput (Mbps)')
-            ax.set_ylim(bottom=0)
-            ax.grid(alpha=0.2)
-            ax.legend()
-            continue
-        if number == 6:
-            orders = ['Together', 'AFirst', 'BCFirst']
-            for protocol, group in part.groupby('protocol', sort=False):
-                group = group.assign(order=group.case.str.removeprefix(f'{protocol.lower()}_'))
-                for i, name in enumerate('ABC'):
-                    grouped = group.groupby('order')[f'{name}_final20s_mbps'].agg(['mean', 'std']).reindex(orders)
-                    ax.errorbar(range(3), grouped['mean'], yerr=grouped['std'],
-                                marker=STYLES[protocol][0], capsize=3,
-                                ls=STYLES[protocol][1], color=COLORS[i],
-                                label=f'{protocol}: {name}')
-            ax.axhline(reference(number, phase)[0], color='black', ls=':', label='Ideal max–min')
-            ax.set_xticks(range(3), ['Together', 'A first', 'B/C first'])
-            ax.set_xlabel('Arrival order')
-            ax.set_ylabel('Final 20 s goodput (Mbps)')
-            ax.set_title(phase)
-            ax.grid(alpha=0.2)
-            ax.legend()
-            continue
-        for protocol, group in part.groupby('protocol', sort=False):
-            protocol_slugs = [slug for prefix, slug, _ in cases(number, protocol)
-                              if slug in group.case.values]
-            x = [int(slug.split('_')[-1]) for slug in protocol_slugs]
-            for i, name in enumerate('ABC'):
-                grouped = group.groupby('case')[f'{name}_final20s_mbps'].agg(['mean', 'std']).reindex(protocol_slugs)
-                ax.errorbar(x, grouped['mean'], yerr=grouped['std'],
-                            marker=STYLES[protocol][0], ls=STYLES[protocol][1],
-                            capsize=3, color=COLORS[i], label=f'{protocol}: {name}')
-        for i, target in enumerate(reference(number, phase)):
-            ax.axhline(target, color=COLORS[i], ls=':', lw=0.8)
-        ax.set_xlabel('Path 2 RTT (ms); path 1 = 20 ms' if number == 1 else 'Case')
-        ax.set_ylabel('Final 20 s goodput (Mbps)')
-        ax.set_title(phase)
-        ax.grid(alpha=0.2)
-        ax.legend()
-    fig.suptitle('Mean ± sample SD; dotted = ideal max–min' + ('; dashed = ideal PF' if number == 5 else ''))
-    save(fig, args.out_dir / 'allocation_comparison')
+    allocation_comparison(frame, number, args.out_dir)
     print(f'Wrote plots and CSV summaries to {args.out_dir}')
     return 0
 

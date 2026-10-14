@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sim-timeout-seconds",
         type=float,
-        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(2.5 * 60 * 60))),
+        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(5 * 60 * 60))),
     )
     parser.add_argument("--sim-time", type=float, default=300, help="Simulation duration in seconds")
     parser.add_argument("--resume", action="store_true", help="Keep completed ping simulations")

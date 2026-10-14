@@ -44,8 +44,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--sim-timeout-seconds",
         type=float,
-        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(8 * 60 * 60))),
-        help="Wall-clock timeout per route-generation simulation (default: 8 hours)",
+        default=float(os.environ.get("EXPERIMENT_SIM_TIMEOUT_SECONDS", str(5 * 60 * 60))),
+        help="Wall-clock timeout per route-generation simulation (default: 5 hours)",
     )
     return parser.parse_args()
 

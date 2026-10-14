@@ -39,7 +39,7 @@ budget per link round and `deltaShuffleInterval=0s` to follow the queue average
 RTT. `deltaNeedGain` retains its queue/NED default.
 The private route in experiment 5 is also a capacity-limiting link and participates.
 
-Experiment 4 preserves the editable NED bottleneck capacity (currently 20 Mbps),
+Experiment 4 preserves the editable NED bottleneck capacity (currently 100 Mbps),
 with one-BDP packet buffers calculated from that capacity and its 40 ms RTT.
 It now generates genuine Alpha and separate Delta files, instead of running
 Delta under an Alpha name. Both waves fit inside every generated 150 s run.
@@ -76,3 +76,8 @@ or comparison plots. Generated filenames/configs are listed by the runner module
 
 Validation: input generation, Python checks, runner selection and OMNeT++
 configuration queries. These checks do not establish runtime protocol performance.
+
+Runner wall-clock timeout defaults to five hours (18,000 s), overridable with
+`--sim-timeout-seconds` or `EXPERIMENT_SIM_TIMEOUT_SECONDS`. Simulation durations
+are unchanged. Allocation comparisons use separate connection panels and consistent
+algorithm colours; means and sample SD are computed across repetitions.
