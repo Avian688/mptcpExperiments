@@ -8,32 +8,66 @@ import math
 import os
 import re
 import sys
+import tempfile
+import itertools
+import mmap
 from pathlib import Path
 
 import numpy as np
 
 from generateExperimentMpOrbKShortestPathsIni import EXPERIMENT_DIR, MANIFEST_FILE
 from parallelProcessing import run_parallel
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from streamScaveCsv import vector_records, tokens
+from extractionResources import extraction_workers
 
 CSV_DIR = EXPERIMENT_DIR / "csvs"
 csv.field_size_limit(sys.maxsize)
 
 
-def read_csv_file(path):
+ARRAY_BLOCK = 65536
+
+
+def discard_pages(array):
+    # These are read-only temporary mappings, not anonymous arrays. Release
+    # visited file pages so one worker does not retain all previously read vectors.
+    mapping = getattr(array, '_mmap', None)
+    if mapping is not None and hasattr(mapping, 'madvise') and hasattr(mmap, 'MADV_DONTNEED'):
+        mapping.madvise(mmap.MADV_DONTNEED)
+
+
+def read_csv_file(path, scratch):
     vectors, scalars = {}, {}
-    with path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            key = (row.get("module", ""), row.get("name", "").split(":")[0])
-            if row.get("type") == "scalar":
-                scalars[key] = float(row["value"])
-            elif row.get("type") == "vector":
-                times = np.fromstring(row.get("vectime", ""), sep=" ")
-                values = np.fromstring(row.get("vecvalue", ""), sep=" ")
-                if len(times) != len(values) or np.any(np.diff(times) < 0):
-                    raise ValueError(f"Malformed vector {key} in {path}")
-                if key in vectors:
-                    raise ValueError(f"Duplicate vector {key}; export exactly one simulation run")
-                vectors[key] = (times, values)
+    for row, spools, wide in vector_records(path, lambda row: row.get('type') in ('vector', 'scalar')):
+        key = (row.get('module', ''), row.get('name', '').split(':')[0])
+        if row['type'] == 'scalar':
+            scalars[key] = float(row['value'])
+            continue
+        if not wide:
+            raise ValueError('K-shortest-path extraction expects CSV-R')
+        if key in vectors:
+            raise ValueError(f'Duplicate vector {key}; export exactly one simulation run')
+        arrays = []
+        for field in ('vectime', 'vecvalue'):
+            target = Path(scratch) / f'{len(vectors)}-{field}.bin'
+            count = 0
+            with target.open('wb') as output:
+                iterator = tokens(spools[field]) if field in spools else iter(())
+                while batch := list(itertools.islice(iterator, ARRAY_BLOCK)):
+                    values = np.fromstring(b' '.join(batch), sep=' ')
+                    if len(values) != len(batch):
+                        raise ValueError(f'Malformed vector {key} in {path}')
+                    values.tofile(output)
+                    count += len(values)
+            arrays.append(np.memmap(target, dtype=float, mode='r') if count else np.array([]))
+        times, values = arrays
+        if len(times) != len(values):
+            raise ValueError(f'Malformed vector {key} in {path}')
+        for offset in range(0, len(times), ARRAY_BLOCK):
+            if np.any(np.diff(times[max(0,offset-1):offset+ARRAY_BLOCK]) < 0):
+                raise ValueError(f'Malformed vector {key} in {path}')
+            discard_pages(times)
+        vectors[key] = (times, values)
     return vectors, scalars
 
 
@@ -52,18 +86,25 @@ def interval_rate_integral(times, values, start, end):
         return 0.0
     # The first sample begins at establishment, which is not exported here.
     # Only accept full measured intervals; the common window begins at 10s.
-    left = times[:-1]
-    right = times[1:]
-    widths = np.maximum(0, np.minimum(right, end) - np.maximum(left, start))
-    return float(np.sum(widths * values[1:]))
+    integral = 0.0
+    for offset in range(0, len(times)-1, ARRAY_BLOCK):
+        end_index = min(offset+ARRAY_BLOCK, len(times)-1)
+        left, right = times[offset:end_index], times[offset+1:end_index+1]
+        widths = np.maximum(0, np.minimum(right, end) - np.maximum(left, start))
+        integral += float(np.sum(widths * values[offset+1:end_index+1]))
+        discard_pages(times); discard_pages(values)
+    return integral
 
 
 def rate_series(vectors, grid, start, end, bytes_received):
     total = np.zeros(len(grid))
     mean = 0.0
     for times, values in vectors:
-        if len(times) and (not np.all(np.isfinite(values)) or np.any(values < 0)):
-            raise ValueError("Invalid receiver goodput vector")
+        for offset in range(0, len(values), ARRAY_BLOCK):
+            chunk = values[offset:offset+ARRAY_BLOCK]
+            if not np.all(np.isfinite(chunk)) or np.any(chunk < 0):
+                raise ValueError("Invalid receiver goodput vector")
+            discard_pages(values)
         mean += interval_rate_integral(times, values, start, end) / (end - start)
         # End-of-interval values for plotting (no interpolation through outages).
         if len(times):
@@ -84,9 +125,14 @@ def write_csv(path, fieldnames, rows):
 
 
 def extract_config(config):
+    with tempfile.TemporaryDirectory(prefix='mporb-vector-arrays-') as scratch:
+        return _extract_config(config, scratch)
+
+
+def _extract_config(config, scratch):
     name = config["config"]
     raw = CSV_DIR / "raw" / f"{name}.csv"
-    vectors, scalars = read_csv_file(raw)
+    vectors, scalars = read_csv_file(raw, scratch)
     destination = f'.userTerminal[{config["destination"]}].app[0]'
     source = f'.userTerminal[{config["source"]}]'
     receiver_scalars = [v for (module, metric), v in scalars.items()
@@ -135,15 +181,21 @@ def extract_config(config):
         series_available.append(get_metric("kPathAvailable", grid + 0.000003))
     availability_sum = np.sum(available, axis=0)
 
-    rtt_values = [v[(t >= start) & (t <= end)] for (module, metric), (t, v) in vectors.items()
-                  if source + ".tcp." in module and metric == "rtt"]
-    rtts = np.concatenate(rtt_values) if rtt_values else np.array([])
-    rtts = rtts[np.isfinite(rtts) & (rtts > 0)]
+    rtt_sum, rtt_count = 0.0, 0
+    for (module, metric), (times, values) in vectors.items():
+        if source + ".tcp." not in module or metric != "rtt":
+            continue
+        for offset in range(0, len(times), ARRAY_BLOCK):
+            t, v = times[offset:offset+ARRAY_BLOCK], values[offset:offset+ARRAY_BLOCK]
+            valid = (t >= start) & (t <= end) & np.isfinite(v) & (v > 0)
+            rtt_sum += float(np.sum(v[valid]))
+            rtt_count += int(np.count_nonzero(valid))
+            discard_pages(times); discard_pages(values)
     raw_stat = raw.stat()
     summary = dict(config, raw_stat=[raw_stat.st_size, raw_stat.st_mtime_ns], goodput_mbps=mean_goodput,
                    full_run_goodput_mbps=bytes_received * 8 / (config["sim_time"] - config["start"]) / 1e6,
                    bytes_received=bytes_received, late_goodput_start=late,
-                   sender_rtt_ms=float(np.mean(rtts) * 1000) if len(rtts) else math.nan,
+                   sender_rtt_ms=rtt_sum / rtt_count * 1000 if rtt_count else math.nan,
                    mean_available_paths=float(np.mean(availability_sum)),
                    all_k_available_pct=float(np.mean(availability_sum == config["k"]) * 100),
                    highest_rank_rtt_ms=paths[-1]["expected_rtt_ms"])
@@ -153,8 +205,12 @@ def extract_config(config):
     # transport retransmissions and must not be added to application goodput.
     for (module, metric), (times, values) in vectors.items():
         filename = re.sub(r"[^A-Za-z0-9_.\[\]-]", "_", f"{module}__{metric}") + ".csv"
-        np.savetxt(out / filename, np.column_stack((times, values)), delimiter=",",
-                   header="time,value", comments="", fmt="%.12g")
+        with (out / filename).open('w') as handle:
+            handle.write('time,value\n')
+            for offset in range(0, len(times), ARRAY_BLOCK):
+                np.savetxt(handle, np.column_stack((times[offset:offset+ARRAY_BLOCK],
+                           values[offset:offset+ARRAY_BLOCK])), delimiter=',', fmt='%.12g')
+                discard_pages(times); discard_pages(values)
     write_csv(out / "paths.csv", list(paths[0]), paths)
     np.savetxt(out / "timeseries.csv", np.column_stack((grid, goodput_series,
                np.sum(series_available, axis=0))), delimiter=",",
@@ -164,6 +220,8 @@ def extract_config(config):
 
 
 def extract_results(configs, cores=1):
+    if configs:
+        cores = extraction_workers(cores, len(configs))
     summaries, paths = [], []
     for summary, path_rows in run_parallel(extract_config, configs, cores):
         summaries.append(summary)
@@ -178,7 +236,7 @@ def extract_results(configs, cores=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--batch", choices=("alpha", "uncoupled", "cubic", "delta", "all"), default="all")
+    parser.add_argument("--batch", choices=("alpha", "delta", "omega", "uncoupled", "cubic", "all"), default="all")
     parser.add_argument("--config", help="Extract one named run, otherwise the entire matrix")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()

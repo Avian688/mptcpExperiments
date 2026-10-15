@@ -16,6 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
+from extractionResources import extraction_workers
+
 from alphaValidation import cases, generate
 CONFIGS = []
 DEFAULT_RUNS = 5
@@ -332,10 +334,11 @@ def run_parallel(label: str, work, entries: list[Entry], args: argparse.Namespac
     for attempt in range(1, args.retries + 2):
         if not pending:
             return
-        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{args.retries + 1}, {args.cores} core(s)")
+        workers = extraction_workers(args.cores, len(pending)) if work is extract_csv else min(args.cores, len(pending))
+        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{args.retries + 1}, {workers} worker(s)")
         failures: list[Entry] = []
         failure_lines = []
-        executor = ThreadPoolExecutor(max_workers=args.cores)
+        executor = ThreadPoolExecutor(max_workers=workers)
         futures = {}
         interrupted = False
         try:

@@ -94,3 +94,40 @@ and `allocation_comparison_BCFirst` (PNG/PDF), replacing the old combined alloca
 plot. Each figure shows separate A/B/C panels, individual runs and mean ± sample
 SD, with the same goodput scale across arrival cases. All CC comparisons follow
 the order above. Experiment 7 retains its layout and plots all five algorithms.
+
+## Extraction memory and CPU use
+
+`--cores` remains the maximum parallelism, including extraction. The extractors
+stream CSV-R in fixed-size blocks, skip unselected vectors, and preserve selected
+numeric text without building whole-file pandas/NumPy objects. Even a single
+very large vector is streamed through temporary files. Metric selections, output
+paths and plot inputs are unchanged. K-shortest-path summaries use disk-backed
+arrays and bounded batches because they also calculate statistics. Temporary
+files are cleaned up on success or handled failure; allow scratch disk space for
+the selected vector (or the selected run's arrays for K-shortest-path extraction).
+
+Before each extraction stage/retry, workers are selected from the requested core
+count, job count, and available RAM. Each worker reserves 256 MiB in the scheduling
+calculation. At most 70% of available RAM is budgeted, leaving at least 1 GiB free.
+This permits 30 workers when the budget is at least 7.5 GiB, rather than imposing
+a fixed small worker count. This reservation is a scheduling estimate, not an
+OS-enforced quota; unrelated processes can still change memory pressure mid-run.
+`EXPERIMENT_EXTRACT_MEMORY_GIB` optionally sets a smaller total extraction budget.
+If RAM availability cannot be read, it supplies the explicit budget instead;
+otherwise the default fallback is one worker. Simulation/export parallelism is
+unchanged.
+
+To re-extract existing Experiment 6 exports without rerunning simulations or
+regenerating INIs, from the OMNeT++ root:
+
+```sh
+.venv/bin/python3 samples/mptcpExperiments/simulations/pythonScripts/experiment6/runExperiment6.py --start-step 3 --skip-generate --cores 30
+```
+
+Synthetic checks cover quoted CSV fields across block boundaries, wide/long
+layouts, metric selection, numeric precision, thread-name collisions and worker
+selection. A local sequential comparison against the former pandas approach
+measured 0.36–0.80 s and 39–42 MiB peak RSS, versus 2.31–2.99 s and 171–258 MiB,
+for 42–81 MiB inputs (mostly unused vectors, all selected vectors, and one large
+vector). Numeric outputs matched exactly. These are synthetic measurements,
+not a throughput guarantee for full runs or concurrent disk workloads.

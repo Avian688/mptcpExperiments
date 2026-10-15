@@ -17,6 +17,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from extractionResources import extraction_workers
+
 CONFIGS = [('MpOrbSemiCoupledAlpha', 'mporb_semicoupled_alpha', 'experiment4_mporb_semicoupled_alpha.ini'),
  ('MpOrbSemiCoupledDelta', 'mporb_semicoupled_delta', 'experiment4_mporb_semicoupled_delta.ini'),
  ('MpOrbOmega', 'mporb_omega', 'experiment4_mporb_omega.ini'),
@@ -375,10 +378,11 @@ def run_parallel(label: str, work, work_entries: list[Entry], args: argparse.Nam
         if not pending:
             return
 
-        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{attempts}, {args.cores} core(s)")
+        workers = extraction_workers(args.cores, len(pending)) if work is extract_csv else min(args.cores, len(pending))
+        print(f"\n{label}: {len(pending)} task(s), attempt {attempt}/{attempts}, {workers} worker(s)")
         failures: list[Entry] = []
         failure_lines = []
-        executor = ThreadPoolExecutor(max_workers=args.cores)
+        executor = ThreadPoolExecutor(max_workers=workers)
         futures = {}
         interrupted = False
         try:
