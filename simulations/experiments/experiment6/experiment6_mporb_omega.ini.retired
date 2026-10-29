@@ -1,4 +1,12 @@
 [General]
+*.router1[0].ppp[2].queue.typename = "MpOrbDeltaQueue"
+*.router1[1].ppp[2].queue.typename = "MpOrbDeltaQueue"
+*.router1[2].ppp[2].queue.typename = "MpOrbDeltaQueue"
+*.router1[3].ppp[2].queue.typename = "MpOrbDeltaQueue"
+*.router1[4].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.router1[5].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.router1[6].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.router1[7].ppp[1].queue.typename = "MpOrbDeltaQueue"
 ned-path = ../..:../../../src:../../../../mptcp/simulations:../../../../mptcp/src:../../../../mporb/simulations:../../../../mporb/src:../../../../orbtcp/simulations:../../../../orbtcp/src:../../../../cubic/simulations:../../../../cubic/src:../../../../tcpPaced/simulations:../../../../tcpPaced/src:../../../../tcpGoodputApplications/simulations:../../../../tcpGoodputApplications/src:../../../../inet4.5/src
 network = mptcpexperiments.simulations.experiments.experiment6.sharedleopaths
 sim-time-limit = 300s
@@ -11,7 +19,7 @@ cmdenv-event-banners = false
 *.configurator.addSubnetRoutes = false
 *.configurator.optimizeRoutes = false
 **.tcp.typename = "MpOrb"
-**.tcp.tcpAlgorithmClass = "MpOrbSemiCoupledDelta"
+**.tcp.tcpAlgorithmClass = "MpOrbOmega"
 **.schedulerMode = "defaultCwnd"
 **.startAllSubflowsAtBeginning = true
 **.subflowStartTimes = ""
@@ -80,18 +88,10 @@ cmdenv-event-banners = false
 *.router1[7].ppp[1].queue.deltaShuffleFraction = 0.05
 **.ppp[*].queue.deltaShuffleFraction = 0
 **.ppp[*].queue.deltaShuffleInterval = 0s
-*.router1[0].ppp[2].queue.typename = "PintQueue"
-*.router1[1].ppp[2].queue.typename = "PintQueue"
-*.router1[2].ppp[2].queue.typename = "PintQueue"
-*.router1[3].ppp[2].queue.typename = "PintQueue"
-*.router1[4].ppp[1].queue.typename = "PintQueue"
-*.router1[5].ppp[1].queue.typename = "PintQueue"
-*.router1[6].ppp[1].queue.typename = "PintQueue"
-*.router1[7].ppp[1].queue.typename = "PintQueue"
 **.ppp[*].queue.typename = "DropTailQueue"
 **.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"
 # Fixed ceil(100 Mbps * 20 ms / (8 * 1448 B)) = 173 packets.
-# Keep this fixed across the RTT sweep; the private 100 Mbps link uses 35.
+# Keep this fixed across the RTT sweep; the private 20 Mbps link uses 35.
 **.ppp[*].queue.packetCapacity = 173
 **.tcp.conn-temp.**.statistic-recording = false
 *.server[*].**.goodput.statistic-recording = true
@@ -323,11 +323,11 @@ cmdenv-event-banners = false
 **.scalar-recording = false
 **.bin-recording = false
 
-[Config Delta_Together_Run1]
-description = "Delta; A, B, C start together; run 1"
+[Config Omega_Together_Run1]
+description = "Omega; A, B, C start together; run 1"
 seed-set = 1
-output-vector-file = "results/Delta_Together_Run1-#0.vec"
-output-scalar-file = "results/Delta_Together_Run1-#0.sca"
+output-vector-file = "results/Omega_Together_Run1-#0.vec"
+output-scalar-file = "results/Omega_Together_Run1-#0.sca"
 *.client[0].app[0].tOpen = 3.230495s
 *.client[0].app[0].tSend = 3.230495s
 *.client[1].app[0].tOpen = 3.230495s
@@ -335,11 +335,11 @@ output-scalar-file = "results/Delta_Together_Run1-#0.sca"
 *.client[2].app[0].tOpen = 3.230495s
 *.client[2].app[0].tSend = 3.230495s
 
-[Config Delta_Together_Run2]
-description = "Delta; A, B, C start together; run 2"
+[Config Omega_Together_Run2]
+description = "Omega; A, B, C start together; run 2"
 seed-set = 2
-output-vector-file = "results/Delta_Together_Run2-#0.vec"
-output-scalar-file = "results/Delta_Together_Run2-#0.sca"
+output-vector-file = "results/Omega_Together_Run2-#0.vec"
+output-scalar-file = "results/Omega_Together_Run2-#0.sca"
 *.client[0].app[0].tOpen = 1.527731s
 *.client[0].app[0].tSend = 1.527731s
 *.client[1].app[0].tOpen = 1.527731s
@@ -347,11 +347,11 @@ output-scalar-file = "results/Delta_Together_Run2-#0.sca"
 *.client[2].app[0].tOpen = 1.527731s
 *.client[2].app[0].tSend = 1.527731s
 
-[Config Delta_Together_Run3]
-description = "Delta; A, B, C start together; run 3"
+[Config Omega_Together_Run3]
+description = "Omega; A, B, C start together; run 3"
 seed-set = 3
-output-vector-file = "results/Delta_Together_Run3-#0.vec"
-output-scalar-file = "results/Delta_Together_Run3-#0.sca"
+output-vector-file = "results/Omega_Together_Run3-#0.vec"
+output-scalar-file = "results/Omega_Together_Run3-#0.sca"
 *.client[0].app[0].tOpen = 1.062522s
 *.client[0].app[0].tSend = 1.062522s
 *.client[1].app[0].tOpen = 1.062522s
@@ -359,11 +359,11 @@ output-scalar-file = "results/Delta_Together_Run3-#0.sca"
 *.client[2].app[0].tOpen = 1.062522s
 *.client[2].app[0].tSend = 1.062522s
 
-[Config Delta_Together_Run4]
-description = "Delta; A, B, C start together; run 4"
+[Config Omega_Together_Run4]
+description = "Omega; A, B, C start together; run 4"
 seed-set = 4
-output-vector-file = "results/Delta_Together_Run4-#0.vec"
-output-scalar-file = "results/Delta_Together_Run4-#0.sca"
+output-vector-file = "results/Omega_Together_Run4-#0.vec"
+output-scalar-file = "results/Omega_Together_Run4-#0.sca"
 *.client[0].app[0].tOpen = 2.823810s
 *.client[0].app[0].tSend = 2.823810s
 *.client[1].app[0].tOpen = 2.823810s
@@ -371,11 +371,11 @@ output-scalar-file = "results/Delta_Together_Run4-#0.sca"
 *.client[2].app[0].tOpen = 2.823810s
 *.client[2].app[0].tSend = 2.823810s
 
-[Config Delta_Together_Run5]
-description = "Delta; A, B, C start together; run 5"
+[Config Omega_Together_Run5]
+description = "Omega; A, B, C start together; run 5"
 seed-set = 5
-output-vector-file = "results/Delta_Together_Run5-#0.vec"
-output-scalar-file = "results/Delta_Together_Run5-#0.sca"
+output-vector-file = "results/Omega_Together_Run5-#0.vec"
+output-scalar-file = "results/Omega_Together_Run5-#0.sca"
 *.client[0].app[0].tOpen = 2.523788s
 *.client[0].app[0].tSend = 2.523788s
 *.client[1].app[0].tOpen = 2.523788s
@@ -383,11 +383,11 @@ output-scalar-file = "results/Delta_Together_Run5-#0.sca"
 *.client[2].app[0].tOpen = 2.523788s
 *.client[2].app[0].tSend = 2.523788s
 
-[Config Delta_AFirst_Run1]
-description = "Delta; A starts before B and C; run 1"
+[Config Omega_AFirst_Run1]
+description = "Omega; A starts before B and C; run 1"
 seed-set = 1
-output-vector-file = "results/Delta_AFirst_Run1-#0.vec"
-output-scalar-file = "results/Delta_AFirst_Run1-#0.sca"
+output-vector-file = "results/Omega_AFirst_Run1-#0.vec"
+output-scalar-file = "results/Omega_AFirst_Run1-#0.sca"
 *.client[0].app[0].tOpen = 3.230495s
 *.client[0].app[0].tSend = 3.230495s
 *.client[1].app[0].tOpen = 61.630156s
@@ -395,11 +395,11 @@ output-scalar-file = "results/Delta_AFirst_Run1-#0.sca"
 *.client[2].app[0].tOpen = 61.474869s
 *.client[2].app[0].tSend = 61.474869s
 
-[Config Delta_AFirst_Run2]
-description = "Delta; A starts before B and C; run 2"
+[Config Omega_AFirst_Run2]
+description = "Omega; A starts before B and C; run 2"
 seed-set = 2
-output-vector-file = "results/Delta_AFirst_Run2-#0.vec"
-output-scalar-file = "results/Delta_AFirst_Run2-#0.sca"
+output-vector-file = "results/Omega_AFirst_Run2-#0.vec"
+output-scalar-file = "results/Omega_AFirst_Run2-#0.sca"
 *.client[0].app[0].tOpen = 1.527731s
 *.client[0].app[0].tSend = 1.527731s
 *.client[1].app[0].tOpen = 62.276192s
@@ -407,11 +407,11 @@ output-scalar-file = "results/Delta_AFirst_Run2-#0.sca"
 *.client[2].app[0].tOpen = 61.823816s
 *.client[2].app[0].tSend = 61.823816s
 
-[Config Delta_AFirst_Run3]
-description = "Delta; A starts before B and C; run 3"
+[Config Omega_AFirst_Run3]
+description = "Omega; A starts before B and C; run 3"
 seed-set = 3
-output-vector-file = "results/Delta_AFirst_Run3-#0.vec"
-output-scalar-file = "results/Delta_AFirst_Run3-#0.sca"
+output-vector-file = "results/Omega_AFirst_Run3-#0.vec"
+output-scalar-file = "results/Omega_AFirst_Run3-#0.sca"
 *.client[0].app[0].tOpen = 1.062522s
 *.client[0].app[0].tSend = 1.062522s
 *.client[1].app[0].tOpen = 63.204032s
@@ -419,11 +419,11 @@ output-scalar-file = "results/Delta_AFirst_Run3-#0.sca"
 *.client[2].app[0].tOpen = 62.052926s
 *.client[2].app[0].tSend = 62.052926s
 
-[Config Delta_AFirst_Run4]
-description = "Delta; A starts before B and C; run 4"
+[Config Omega_AFirst_Run4]
+description = "Omega; A starts before B and C; run 4"
 seed-set = 4
-output-vector-file = "results/Delta_AFirst_Run4-#0.vec"
-output-scalar-file = "results/Delta_AFirst_Run4-#0.sca"
+output-vector-file = "results/Omega_AFirst_Run4-#0.vec"
+output-scalar-file = "results/Omega_AFirst_Run4-#0.sca"
 *.client[0].app[0].tOpen = 2.823810s
 *.client[0].app[0].tSend = 2.823810s
 *.client[1].app[0].tOpen = 63.671271s
@@ -431,11 +431,11 @@ output-scalar-file = "results/Delta_AFirst_Run4-#0.sca"
 *.client[2].app[0].tOpen = 63.386908s
 *.client[2].app[0].tSend = 63.386908s
 
-[Config Delta_AFirst_Run5]
-description = "Delta; A starts before B and C; run 5"
+[Config Omega_AFirst_Run5]
+description = "Omega; A starts before B and C; run 5"
 seed-set = 5
-output-vector-file = "results/Delta_AFirst_Run5-#0.vec"
-output-scalar-file = "results/Delta_AFirst_Run5-#0.sca"
+output-vector-file = "results/Omega_AFirst_Run5-#0.vec"
+output-scalar-file = "results/Omega_AFirst_Run5-#0.sca"
 *.client[0].app[0].tOpen = 2.523788s
 *.client[0].app[0].tSend = 2.523788s
 *.client[1].app[0].tOpen = 61.111707s
@@ -443,11 +443,11 @@ output-scalar-file = "results/Delta_AFirst_Run5-#0.sca"
 *.client[2].app[0].tOpen = 60.494920s
 *.client[2].app[0].tSend = 60.494920s
 
-[Config Delta_BCFirst_Run1]
-description = "Delta; B and C start before A; run 1"
+[Config Omega_BCFirst_Run1]
+description = "Omega; B and C start before A; run 1"
 seed-set = 1
-output-vector-file = "results/Delta_BCFirst_Run1-#0.vec"
-output-scalar-file = "results/Delta_BCFirst_Run1-#0.sca"
+output-vector-file = "results/Omega_BCFirst_Run1-#0.vec"
+output-scalar-file = "results/Omega_BCFirst_Run1-#0.sca"
 *.client[0].app[0].tOpen = 63.230495s
 *.client[0].app[0].tSend = 63.230495s
 *.client[1].app[0].tOpen = 1.630156s
@@ -455,11 +455,11 @@ output-scalar-file = "results/Delta_BCFirst_Run1-#0.sca"
 *.client[2].app[0].tOpen = 1.474869s
 *.client[2].app[0].tSend = 1.474869s
 
-[Config Delta_BCFirst_Run2]
-description = "Delta; B and C start before A; run 2"
+[Config Omega_BCFirst_Run2]
+description = "Omega; B and C start before A; run 2"
 seed-set = 2
-output-vector-file = "results/Delta_BCFirst_Run2-#0.vec"
-output-scalar-file = "results/Delta_BCFirst_Run2-#0.sca"
+output-vector-file = "results/Omega_BCFirst_Run2-#0.vec"
+output-scalar-file = "results/Omega_BCFirst_Run2-#0.sca"
 *.client[0].app[0].tOpen = 61.527731s
 *.client[0].app[0].tSend = 61.527731s
 *.client[1].app[0].tOpen = 2.276192s
@@ -467,11 +467,11 @@ output-scalar-file = "results/Delta_BCFirst_Run2-#0.sca"
 *.client[2].app[0].tOpen = 1.823816s
 *.client[2].app[0].tSend = 1.823816s
 
-[Config Delta_BCFirst_Run3]
-description = "Delta; B and C start before A; run 3"
+[Config Omega_BCFirst_Run3]
+description = "Omega; B and C start before A; run 3"
 seed-set = 3
-output-vector-file = "results/Delta_BCFirst_Run3-#0.vec"
-output-scalar-file = "results/Delta_BCFirst_Run3-#0.sca"
+output-vector-file = "results/Omega_BCFirst_Run3-#0.vec"
+output-scalar-file = "results/Omega_BCFirst_Run3-#0.sca"
 *.client[0].app[0].tOpen = 61.062522s
 *.client[0].app[0].tSend = 61.062522s
 *.client[1].app[0].tOpen = 3.204032s
@@ -479,11 +479,11 @@ output-scalar-file = "results/Delta_BCFirst_Run3-#0.sca"
 *.client[2].app[0].tOpen = 2.052926s
 *.client[2].app[0].tSend = 2.052926s
 
-[Config Delta_BCFirst_Run4]
-description = "Delta; B and C start before A; run 4"
+[Config Omega_BCFirst_Run4]
+description = "Omega; B and C start before A; run 4"
 seed-set = 4
-output-vector-file = "results/Delta_BCFirst_Run4-#0.vec"
-output-scalar-file = "results/Delta_BCFirst_Run4-#0.sca"
+output-vector-file = "results/Omega_BCFirst_Run4-#0.vec"
+output-scalar-file = "results/Omega_BCFirst_Run4-#0.sca"
 *.client[0].app[0].tOpen = 62.823810s
 *.client[0].app[0].tSend = 62.823810s
 *.client[1].app[0].tOpen = 3.671271s
@@ -491,11 +491,11 @@ output-scalar-file = "results/Delta_BCFirst_Run4-#0.sca"
 *.client[2].app[0].tOpen = 3.386908s
 *.client[2].app[0].tSend = 3.386908s
 
-[Config Delta_BCFirst_Run5]
-description = "Delta; B and C start before A; run 5"
+[Config Omega_BCFirst_Run5]
+description = "Omega; B and C start before A; run 5"
 seed-set = 5
-output-vector-file = "results/Delta_BCFirst_Run5-#0.vec"
-output-scalar-file = "results/Delta_BCFirst_Run5-#0.sca"
+output-vector-file = "results/Omega_BCFirst_Run5-#0.vec"
+output-scalar-file = "results/Omega_BCFirst_Run5-#0.sca"
 *.client[0].app[0].tOpen = 62.523788s
 *.client[0].app[0].tSend = 62.523788s
 *.client[1].app[0].tOpen = 1.111707s

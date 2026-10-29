@@ -2,7 +2,7 @@
 """Definitions and INI generation for the small MpORB validation experiments.
 
 Experiment 1 combines busy-path redistribution and the inter-RTT sweep.
-Experiments 5 and 6 isolate allocation and dependence on arrival order.
+Experiment 5 isolates allocation. Experiments 6/7 live in redistributionExperiments.
 """
 from pathlib import Path
 import random
@@ -23,12 +23,11 @@ METRICS = (
     'queueLength', 'bandwidth', 'numberOfFlows', 'pintLocalUtilization',
     'cwndLimited', 'retransmissionRate',
 )
-NETWORKS = {1: 'busyPaths', 5: 'fairnessPaths', 6: 'sharedleopaths'}
-DURATIONS = {1: 240, 5: 300, 6: 300}
+NETWORKS = {1: 'busyPaths', 5: 'fairnessPaths'}
+DURATIONS = {1: 240, 5: 300}
 USER_PATHS = {
     1: ((1, 2), (1,), (2,)),
     5: ((1, 2), (1,), (1,)),
-    6: ((1, 2, 3, 4), (1, 2, 5, 6), (3, 4, 7, 8)),
 }
 
 
@@ -37,6 +36,10 @@ def protocols(number):
 
 
 def cases(number, protocol=None):
+    if number == 6:
+        from redistributionExperiments import configurations
+        return [(prefix, slug, 'Redistribution chain') for prefix, slug, _ in configurations(6)
+                if protocol is None or prefix.startswith(protocol + '_')]
     if protocol is None:
         return [case for name in protocols(number) for case in cases(number, name)]
     if protocol not in protocols(number):
@@ -46,11 +49,6 @@ def cases(number, protocol=None):
                 for rtt in RTTS_MS]
     if number == 5:
         scenarios = [('Fairness', 'fairness', 'Two shared links and a private route')]
-    elif number == 6:
-        scenarios = [(order, order, title) for order, title in (
-            ('Together', 'A, B, C start together'),
-            ('AFirst', 'A starts before B and C'),
-            ('BCFirst', 'B and C start before A'))]
     else:
         raise ValueError(f'Unsupported MpORB experiment: {number}')
     # Preserve Alpha output paths; each other CC gets a separate directory.
@@ -61,8 +59,6 @@ def cases(number, protocol=None):
 def phases(number):
     if number == 1:
         return [(5, 60, 'Baseline'), (60, 120, 'Competition'), (120, 240, 'Recovery')]
-    if number == 6:
-        return [(65, 300, 'All connections active')]
     return [(5, 300, 'Steady topology')]
 
 
@@ -72,12 +68,7 @@ def reference(number, phase, objective='maxmin'):
         return (50., 50., 20.) if phase == 'Competition' else (200/3,) * 3
     if number == 5:
         return (60., 60., 60.) if objective == 'maxmin' else (40., 80., 80.)
-    # Experiment 6 inherits the editable ABC topology; do not assume 100 Mbps.
-    source = (SIM_ROOT / 'experiments/experiment6/sharedleopaths.ned').read_text()
-    link = re.search(r'channel bottleneckPath.*?datarate\s*=\s*([\d.]+)Mbps', source, re.S)
-    if link is None:
-        raise ValueError('Cannot read experiment 6 bottleneck capacity in Mbps')
-    return (8 * float(link[1]) / 3,) * 3
+    raise ValueError(f'Unsupported reference experiment: {number}')
 
 
 def general(number, protocol='Alpha'):
@@ -124,9 +115,6 @@ def general(number, protocol='Alpha'):
     routes = {
         1: ('p1Egress p2Egress', 'p1Egress', 'p2Egress'),
         5: ('right privateEgress', 'middle', 'right'),
-        6: ('router2[0] router2[1] router2[2] router2[3]',
-            'router2[0] router2[1] router2[4] router2[5]',
-            'router2[2] router2[3] router2[6] router2[7]'),
     }[number]
     if number == 1:
         routes += ('p2Egress',) * 4
@@ -144,11 +132,10 @@ def general(number, protocol='Alpha'):
     elif number == 5:
         queues = ['left.ppp[0]', 'middle.ppp[1]', 'privateIngress.ppp[0]']
         lines += ['*.privateIngress.ppp[0].queue.packetCapacity = 35']
-    else:
-        queues = [f'router1[{i}].ppp[{2 if i < 4 else 1}]' for i in range(8)]
-    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol in ('Delta', 'Omega'))
+    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol in ('Omega', 'SenderDelta', 'Theta'))
+    queue_type = "MpOrbDeltaQueue" if protocol in ("Omega", "SenderDelta", "Theta") else "PintQueue"
     for queue in queues:
-        lines += [f'*.{queue}.queue.typename = "PintQueue"']
+        lines += [f'*.{queue}.queue.typename = "{queue_type}"']
     lines += [
         '**.ppp[*].queue.typename = "DropTailQueue"',
         '**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"',
@@ -177,6 +164,9 @@ def general(number, protocol='Alpha'):
 
 
 def generate(number):
+    if number == 6:
+        from redistributionExperiments import generate as generate_redistribution
+        return generate_redistribution(6)
     directory = SIM_ROOT / 'experiments' / f'experiment{number}'
     directory.mkdir(parents=True, exist_ok=True)
     for protocol in protocols(number):
@@ -189,11 +179,6 @@ def generate(number):
                           par='sendingEnabled', value='false')
         ET.indent(scenario)
         ET.ElementTree(scenario).write(directory / 'conditions.xml', encoding='unicode')
-    if number == 6:
-        source = (SIM_ROOT / 'experiments/experiment2/sharedleopaths.ned').read_text()
-        source = source.replace('experiments.experiment2', 'experiments.experiment6')
-        source = source.replace('access40ms', 'access20ms').replace('delay = 10ms;', 'delay = 5ms;')
-        (directory / 'sharedleopaths.ned').write_text(source)
     print(f'Generated experiment {number}: {len(cases(number)) * len(RUNS)} configurations.')
 
 
@@ -205,15 +190,6 @@ def generate_protocol(number, protocol, directory):
             starts = [rng.uniform(0.1, 5) for _ in range(3)]
             if number == 1:
                 starts += [60.] * 4
-            elif number == 6:
-                # Same start offsets per run in all orders; late group joins at 60 s.
-                order = prefix.split('_', 1)[1]
-                late = {'AFirst': (1, 2), 'BCFirst': (0,), 'Together': ()}[order]
-                if order == 'Together':
-                    starts = [starts[0]] * 3
-                else:
-                    for i in late:
-                        starts[i] += 60
             config = f'{prefix}_Run{run}'
             lines += [f'[Config {config}]', f'description = "{protocol}; {title}; run {run}"',
                       f'seed-set = {run}',

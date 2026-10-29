@@ -1,4 +1,10 @@
 [General]
+*.lane0Router[0].ppp[0].queue.typename = "MpOrbDeltaQueue"
+*.lane0Router[1].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.lane0Router[2].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.lane1Router[0].ppp[0].queue.typename = "MpOrbDeltaQueue"
+*.lane1Router[1].ppp[1].queue.typename = "MpOrbDeltaQueue"
+*.lane1Router[2].ppp[1].queue.typename = "MpOrbDeltaQueue"
 ned-path = ../..:../../../src:../../../../mptcp/simulations:../../../../mptcp/src:../../../../mporb/simulations:../../../../mporb/src:../../../../orbtcp/simulations:../../../../orbtcp/src:../../../../cubic/simulations:../../../../cubic/src:../../../../tcpPaced/simulations:../../../../tcpPaced/src:../../../../tcpGoodputApplications/simulations:../../../../tcpGoodputApplications/src:../../../../inet4.5/src
 network = mptcpexperiments.simulations.experiments.experiment7.twoLaneParkingLot
 record-eventlog = false
@@ -115,12 +121,6 @@ cmdenv-event-banners = false
 *.lane1Router[2].ppp[1].queue.deltaShuffleFraction = 0.05
 **.ppp[*].queue.deltaShuffleFraction = 0
 **.ppp[*].queue.deltaShuffleInterval = 0s
-*.lane0Router[0].ppp[0].queue.typename = "PintQueue"
-*.lane0Router[1].ppp[1].queue.typename = "PintQueue"
-*.lane0Router[2].ppp[1].queue.typename = "PintQueue"
-*.lane1Router[0].ppp[0].queue.typename = "PintQueue"
-*.lane1Router[1].ppp[1].queue.typename = "PintQueue"
-*.lane1Router[2].ppp[1].queue.typename = "PintQueue"
 **.ppp[*].queue.typename = "DropTailQueue"
 **.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"
 **.tcp.conn-temp.**.statistic-recording = false

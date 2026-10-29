@@ -14,10 +14,7 @@ EXPERIMENT_DIR = SCRIPT_DIR.parents[1] / 'experiments' / 'experimentTest'
 # (physical path, first background host, start, stop); path numbers are one-based.
 WAVES = ((5, 0, 20, 40), (6, 5, 20, 40), (1, 10, 60, 80), (2, 15, 60, 80))
 PROTOCOLS = dict(base.PROTOCOLS)
-PROTOCOLS['mporb_sender_delta'] = dict(config='MpOrbSenderDelta', tcp_type='MpOrb',
-        algorithm_class='MpOrbSenderDelta', description='MpORB sender Delta')
-PROTOCOLS['mporb_omega'] = dict(config='MpOrbOmega', tcp_type='MpOrb',
-        algorithm_class='MpOrbOmega', description='MpORB Omega')
+
 RUNS = base.RUNS
 PATH_MBPS = float(re.search(r'channel bottleneckPath.*?datarate\s*=\s*([\d.]+)Mbps', (EXPERIMENT_DIR / 'sharedleopaths.ned').read_text(), re.S)[1])
 PATH_RTT_MS = base.PATH_RTT_MS
@@ -84,11 +81,12 @@ def main():
         lines[1:1] = background_settings(settings)
         # Background connections use the same CC as A/B/C.
         # Preserve experiment 2's bottleneck PPP indices by appending access links.
+        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta'))
+        queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta') else "PintQueue"
         for path in range(8):
             gate = 2 if path < 4 else 1
-            lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "PintQueue"')
+            lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "{queue_type}"')
 
-        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] in ('MpOrbSemiCoupledDelta', 'MpOrbSenderDelta', 'MpOrbOmega'))
         lines += [
             f'**.tcp.typename = "{settings["tcp_type"]}"',
             f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"',

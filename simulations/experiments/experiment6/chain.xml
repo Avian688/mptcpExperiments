@@ -1,0 +1,5 @@
+<scenario>
+  <at t="90s">
+    <set-param module="client[4].tcp" par="sendingEnabled" value="false" />
+  </at>
+</scenario>

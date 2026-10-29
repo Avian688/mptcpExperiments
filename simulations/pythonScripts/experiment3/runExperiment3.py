@@ -16,12 +16,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from extractionResources import extraction_workers
+from experimentProtocols import legacy_protocols
 
-CONFIGS = [('MpOrbAlpha', 'mporb_alpha', 'experiment3_mporb_alpha.ini'),
- ('MpOrbDelta', 'mporb_delta', 'experiment3_mporb_delta.ini'),
- ('MpOrbOmega', 'mporb_omega', 'experiment3_mporb_omega.ini'),
- ('MpOrbUncoupled', 'mporb', 'experiment3_mporb.ini'),
- ('CubicUncoupled', 'cubic', 'experiment3_cubic.ini')]
+CONFIGS = [(v['config'], k, f'experiment3_{k}.ini') for k, v in legacy_protocols(short_alpha=True).items()]
 DEFAULT_RUNS = 5
 
 

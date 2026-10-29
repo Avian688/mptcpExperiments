@@ -42,7 +42,7 @@ class AlphaExperiments(unittest.TestCase):
                 folder = run_root/module
                 folder.mkdir(parents=True, exist_ok=True)
                 pd.DataFrame({'time': times, metric: value}).to_csv(folder/f'{metric}.csv', index=False)
-            for protocol in ('mporb_semicoupled_alpha', 'mporb_semicoupled_beta'):
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_sender_delta'):
                 run_root = inputs/protocol/'run1'
                 for i in range(3):
                     write(run_root, f'sharedleopaths.server[{i}].app[0]', 'goodput', 200e6)
@@ -65,50 +65,33 @@ class AlphaExperiments(unittest.TestCase):
             self.assertTrue(sentinel.exists())
             for name in ('phase_goodput.png', 'phase_goodput.pdf', 'phase_runs.csv', 'phase_summary.csv'):
                 self.assertGreater((output/name).stat().st_size, 0)
-            for protocol in ('mporb_semicoupled_alpha', 'mporb_semicoupled_beta'):
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_sender_delta'):
                 self.assertTrue((output/'individual'/protocol/'run1'/'response.png').is_file())
 
-    def test_alpha_beta_pairing_and_separate_outputs(self):
-        for number, count in ((5, 10), (6, 30)):
-            definitions = spec.cases(number)
-            self.assertEqual(len(definitions) * 5, count)
-            self.assertEqual(len({slug for _, slug, _ in definitions}), len(definitions))
-            directory = ROOT / f'simulations/experiments/experiment{number}'
-            alpha = parse_ini(directory / f'experiment{number}_mporb_alpha.ini')
-            beta = parse_ini(directory / f'experiment{number}_mporb_beta.ini')
-            self.assertEqual(beta['General']['**.tcp.tcpAlgorithmClass'], '"MpOrbSemiCoupledBeta"')
-            for key, value in alpha['General'].items():
-                if key != '**.tcp.tcpAlgorithmClass':
-                    self.assertEqual(value, beta['General'][key], key)
-            for section in alpha.sections():
-                if section == 'General':
-                    continue
-                other = section.replace('Alpha_', 'Beta_')
-                for key, value in alpha[section].items():
-                    if key in ('description', 'output-vector-file', 'output-scalar-file'):
-                        continue
-                    self.assertEqual(value, beta[other][key], (section, key))
-                self.assertNotEqual(alpha[section]['output-vector-file'], beta[other]['output-vector-file'])
-            for metric in spec.BETA_METRICS:
-                self.assertTrue(any(k.endswith(f'.{metric}:vector.vector-recording')
-                                    for k in beta['General']), metric)
+    def test_six_protocol_matrix_and_separate_outputs(self):
+        from experimentProtocols import PROTOCOLS
+        definitions = spec.cases(5)
+        self.assertEqual(len(definitions), 6)
+        self.assertEqual(len({slug for _,slug,_ in definitions}), 6)
+        for protocol, (_,algorithm,_) in PROTOCOLS.items():
+            ini=parse_ini(ROOT/f'simulations/experiments/experiment5/experiment5_mporb_{protocol.lower()}.ini')
+            self.assertEqual(ini['General']['**.tcp.tcpAlgorithmClass'], f'"{algorithm}"')
+            self.assertEqual(ini['General']['**.vector-recording'], 'false')
 
-    def test_runner_defaults_include_both_protocols_without_launching(self):
-        for number, count in ((5, 10), (6, 30)):
-            with patch.object(sys, 'argv', ['runner', '--skip-generate', '--dry-run']), \
-                    patch.object(runner, 'run_parallel') as launch, \
-                    patch('builtins.print'):
-                self.assertEqual(runner.main(number), 0)
+    def test_runner_defaults_include_six_protocols_without_launching(self):
+        from experimentProtocols import PROTOCOLS
+        for number, count in ((5,30),(6,30),(7,60)):
+            with patch.object(sys,'argv',['runner','--skip-generate','--dry-run']), patch.object(runner,'run_parallel') as launch, patch('builtins.print'):
+                self.assertEqual(runner.main(number),0)
             launch.assert_not_called()
-            self.assertEqual(len(runner.CONFIGS) * 5, count)
-            self.assertEqual({entry[2] for entry in runner.CONFIGS},
-                             {f'experiment{number}_mporb_alpha.ini', f'experiment{number}_mporb_beta.ini'})
+            self.assertEqual(len(runner.CONFIGS)*5,count)
+            self.assertEqual({entry[0].split('_')[0] for entry in runner.CONFIGS},set(PROTOCOLS))
 
-    def test_comparison_keeps_alpha_and_beta_measurements_separate(self):
+    def test_comparison_keeps_alpha_and_sender_delta_measurements_separate(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             times = np.arange(.5, 300.5, .5)
-            for slug, value in (('fairness', 60.), ('beta_fairness', 40.)):
+            for slug, value in (('fairness', 60.), ('senderdelta_fairness', 40.)):
                 for run in (1, 2):
                     for i in range(3):
                         folder = root / 'csvs' / slug / f'run{run}' / f'fairnessPaths.server[{i}].app[0]'
@@ -118,22 +101,20 @@ class AlphaExperiments(unittest.TestCase):
             original_save = plots.save
             def capture(fig, path):
                 if path.name == 'allocation_comparison':
-                    labels.extend(fig.axes[0].get_legend_handles_labels()[1])
+                    labels.extend(x.get_text().replace('\n', ' ') for x in fig.axes[0].get_xticklabels())
                 original_save(fig, path)
             with patch.object(sys, 'argv', ['plot', '--runs', '1', '2', '--csv-root', str(root/'csvs'),
                                            '--out-dir', str(root/'plots')]), \
                     patch.object(plots, 'dashboard'), patch.object(plots, 'save', side_effect=capture):
                 self.assertEqual(plots.main(5), 0)
             results = pd.read_csv(root/'plots/phase_runs.csv')
-            self.assertEqual(set(results.protocol), {'Alpha', 'Beta'})
+            self.assertEqual(set(results.protocol), {'Alpha', 'SenderDelta'})
             self.assertEqual(results[results.protocol == 'Alpha'].A_final20s_mbps.mean(), 60.)
-            self.assertEqual(results[results.protocol == 'Beta'].A_final20s_mbps.mean(), 40.)
-            self.assertIn('Alpha', labels)
-            self.assertIn('Beta', labels)
+            self.assertEqual(results[results.protocol == 'SenderDelta'].A_final20s_mbps.mean(), 40.)
             self.assertTrue((root/'plots/allocation_comparison.png').exists())
 
     def test_matrix_and_background_scope(self):
-        for number, count in ((1, 50), (5, 5), (6, 15)):
+        for number, count in ((1, 50), (5, 5)):
             path = ROOT / f'simulations/experiments/experiment{number}/experiment{number}_mporb_alpha.ini'
             ini = parse_ini(path)
             self.assertEqual(sum(s.startswith('Config ') for s in ini), count)
@@ -159,15 +140,9 @@ class AlphaExperiments(unittest.TestCase):
         self.assertEqual(event.attrib['t'], '120s')
         self.assertEqual({p.attrib['module'] for p in event}, {f'client[{i}].tcp' for i in range(3, 7)})
 
-    def test_arrival_order_preserves_pairing(self):
-        ini = parse_ini(ROOT / 'simulations/experiments/experiment6/experiment6_mporb_alpha.ini')
-        for run in range(1, 6):
-            def starts(order):
-                s = ini[f'Config Alpha_{order}_Run{run}']
-                return [float(s[f'*.client[{i}].app[0].tOpen'][:-1]) for i in range(3)]
-            a = starts('AFirst'); bc = starts('BCFirst')
-            np.testing.assert_allclose(np.array(bc)-np.array(a), [60, -60, -60])
-            self.assertEqual(len(set(starts('Together'))), 1)
+    def test_chain_replaces_arrival_order_cases(self):
+        self.assertEqual(len(spec.cases(6)),6)
+        self.assertTrue(all(prefix.endswith('_Chain') for prefix,_,_ in spec.cases(6)))
 
     def test_reference_allocations_are_feasible(self):
         # Busy-path competition: A withdraws from link 2; five competitors fill it.

@@ -8,7 +8,7 @@ import random
 from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from experimentProtocols import shuffle_settings
+from experimentProtocols import shuffle_settings, legacy_protocols, SHUFFLE_CLASSES
 
 MSS_BYTES = 1448
 PATH_MBPS = float(re.search(r'datarate\s*=\s*([\d.]+)Mbps',
@@ -22,26 +22,7 @@ SIM_TIME_LIMIT_S = 200
 RUNS = range(1, 6)
 START_RANDOM_SEED = 4999
 
-PROTOCOLS = {'mporb_alpha': {'config': 'MpOrbAlpha',
-                 'tcp_type': 'MpOrb',
-                 'algorithm_class': 'MpOrbSemiCoupledAlpha',
-                 'description': 'MpORB Alpha'},
- 'mporb_delta': {'config': 'MpOrbDelta',
-                 'tcp_type': 'MpOrb',
-                 'algorithm_class': 'MpOrbSemiCoupledDelta',
-                 'description': 'MpORB Delta'},
- 'mporb_omega': {'config': 'MpOrbOmega',
-                 'tcp_type': 'MpOrb',
-                 'algorithm_class': 'MpOrbOmega',
-                 'description': 'MpORB Omega'},
- 'mporb': {'config': 'MpOrbUncoupled',
-           'tcp_type': 'MpOrb',
-           'algorithm_class': 'MpOrbUncoupled',
-           'description': 'OrbCC uncoupled'},
- 'cubic': {'config': 'CubicUncoupled',
-           'tcp_type': 'MpTcp',
-           'algorithm_class': 'MpTcpMetaCubic',
-           'description': 'CUBIC uncoupled'}}
+PROTOCOLS = legacy_protocols(short_alpha=True)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 SIM_ROOT = SCRIPT_DIR.parents[1]
@@ -250,12 +231,13 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'*.backgroundClient[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
-    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] in ("MpOrbSemiCoupledDelta", "MpOrbOmega")):
+    queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta') else "PintQueue"
+    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta')):
         write(line)
     if is_mporb:
         write("# Specific PintQueue assignments must precede the broad fallback.")
-        write('**.p1Ingress.ppp[0].queue.typename = "PintQueue"')
-        write('**.p2Ingress.ppp[0].queue.typename = "PintQueue"')
+        write(f'**.p1Ingress.ppp[0].queue.typename = "{queue_type}"')
+        write(f'**.p2Ingress.ppp[0].queue.typename = "{queue_type}"')
     write('**.ppp[*].queue.typename = "DropTailQueue"')
     write('**.ppp[*].queue.dropperClass = "inet::queueing::PacketAtCollectionEndDropper"')
     if is_mporb:

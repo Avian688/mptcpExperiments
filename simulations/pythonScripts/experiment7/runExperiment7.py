@@ -1,13 +1,9 @@
-#!/usr/bin/env python3
 from pathlib import Path
 import sys
-
-SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from runAlphaValidation import main
-from parkingLot import configurations, generate
-
+from redistributionExperiments import configurations, generate
 if __name__ == '__main__':
-    raise SystemExit(main(7, configurations=configurations(), generate_inputs=generate,
-                         plot_script=SCRIPT_DIR / 'plotExperiment7.py',
-                         extract_script=SCRIPT_DIR / 'extractSingleCsvFile.py'))
+    raise SystemExit(main(7, configurations=configurations(7), generate_inputs=generate,
+        plot_script=Path(__file__).with_name('plotExperiment7.py'),
+        extract_script=Path(__file__).with_name('extractSingleCsvFile.py')))

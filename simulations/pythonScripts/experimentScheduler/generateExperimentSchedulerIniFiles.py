@@ -250,7 +250,10 @@ def main():
                     write(f'description = "{protocol}; {scheduler}; RTT {rtt1}/{rtt2} ms; run {run}"')
                     write(f'**.tcp.typename = "{PROTOCOLS[protocol][0]}"')
                     write(f'**.tcp.tcpAlgorithmClass = "{PROTOCOLS[protocol][1]}"')
-                    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], protocol in ('Delta', 'Omega')):
+                    queue_type = "MpOrbDeltaQueue" if protocol in ('Omega', 'SenderDelta', 'Theta') else "PintQueue"
+                    write(f'**.p1Ingress.ppp[0].queue.typename = "{queue_type}"')
+                    write(f'**.p2Ingress.ppp[0].queue.typename = "{queue_type}"')
+                    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], protocol in ('Omega', 'SenderDelta', 'Theta')):
                         write(line)
                     write(f'seed-set = {run}')
                     write(f'*.path1Rtt = {rtt1}ms')

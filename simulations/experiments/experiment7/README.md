@@ -1,112 +1,48 @@
-# Experiment 7: two-lane parking lot
+# Experiment 7: multipath parking lot with lane-local competition
 
-Two independent copies of the three-link parking lot in
-`orbtcpExperiments/simulations/paperExperiments/experiment6/parkinglot.ned`.
-There are four **connections**, each with exactly **two subflows**:
+Two lanes, each containing three serial 100 Mbps core links. The spine crosses
+all three links in either lane; rib i crosses only link i in either lane.
+Every original connection has two edge-disjoint alternatives.
 
-| Connection | Subflow in lane 1 | Subflow in lane 2 |
-| --- | --- | --- |
-| Spine | Links 1, 2, 3 | Links 1, 2, 3 |
-| Rib 1 | Link 1 | Link 1 |
-| Rib 2 | Link 2 | Link 2 |
-| Rib 3 | Link 3 | Link 3 |
+- Symmetric: no background traffic, a control for multi-bottleneck fairness.
+- LaneShift: five single-path connections join lane 1's middle link at 30 s,
+  stop admission at 60 s; five new connections join lane 2's middle link at
+  90 s and stop admission at 120 s. All runs end at 150 s.
 
-Every core link is 100 Mbps. Each subflow has two 10 Gbps access legs;
-propagation delay is placed on these legs so crossing three core links does
-not itself give the spine a longer propagation RTT. The two lanes have
-separate routers and links, with no cross-lane links. Hosts bind subflow 0 to
-ppp0/lane 1 and subflow 1 to ppp1/lane 2, with explicit remote interface addresses.
+Unlike the old mirrored RTT sweep, this gives the spine and middle rib a reason
+to change lanes. The spine's movement also changes competition for the outer
+ribs. Equal RTTs isolate redistribution before introducing RTT asymmetry.
 
-## Matrix and timing
+Ideal full-capacity connection max-min rates in the symmetric case are 100 Mbps
+each. During either wave, the five backgrounds can receive 20 Mbps each; spine
+and middle rib receive 50 Mbps each on the other middle link, and the outer ribs
+receive 150 Mbps each. These are topology references, not CC predictions.
 
-- MpORB Alpha, MpORB Delta, MpORB Omega, uncoupled OrbCC/PINT
-  (`MpOrbUncoupled`), and uncoupled CUBIC (`MpTcpMetaCubic`). All connections in a run use the selected CC.
-- `defaultCwnd` for every connection and algorithm.
-- RTTs **20, 40, ..., 200 ms**, applied equally to both lanes and all connections
-  in each case, matching the source parking-lot sweep. Baseline: 20/20 ms.
-- Five paired seeds per case: **250 simulations** in total.
-- One BDP of buffering per bottleneck: `ceil(100e6 * RTT / (8 * 1448))`
-  packets, from 173 at 20 ms to 1727 at 200 ms. Each lane gets its own buffer.
-- As in the source experiment, ribs start at 0, the spine starts at a seeded
-  time in the first 500 RTTs, duration is 2000 RTTs (40–400 s), and summaries
-  use the final 500 RTTs (last quarter). Starts are identical across algorithms.
-- Sender queues continuously refill after the initial application write;
-  `sendBytes=1MiB` seeds transmission and `tClose=-1s` keeps connections open.
-- Fixed links: the source experiment's periodic hard handovers are intentionally
-  omitted to isolate parking-lot allocation. No background admission events.
-- Exact PINT controls match experiments 5/6: no U/count quantisation, no flow
-  sketch, full feedback. Queue estimator dynamics and feedback delay remain.
-  The same forward PintQueue instances and capacities are used for CUBIC;
-  CUBIC does not use the INT feedback for congestion control.
+All participants use the selected CC: Alpha, Omega, Sender Delta, Theta,
+OrbCC uncoupled, CUBIC uncoupled (also plot order). Five paired seeds; 20 ms
+propagation RTT; 10 Gbps access legs; 173-packet core queues (one BDP at MSS 1448).
+`defaultCwnd` throughout. Only forward core bottlenecks participate in shuffle;
+access/reverse queues are ordinary DropTail queues. Exact INT/full feedback.
+Background stop means admission stops; already admitted bytes may drain.
 
-## What it measures
+Plots include per-connection goodput with ideal references; source-interface
+subflow wire rates; core-link busy fractions; cwnd, U, send queues and receiver
+HoL; background goodput; per-case algorithm comparisons; mean +/- sample SD and
+variance across runs. U is not plotted as link busy fraction. Wire rates include
+protocol headers and are not application goodput. Interface order labels paths
+without assuming connection-ID ordering. Non-INT algorithms have no U samples.
+Only these diagnostic vectors are enabled; the vector catch-all remains false.
 
-The spine encounters three distinct congested links per subflow. Each rib
-encounters only one. This tests whether multiple bottlenecks penalise a long
-connection, even though the two paths within each connection are edge-disjoint.
+Phase summaries use the final ten seconds of each phase, require 95% sample
+coverage, and do not fill missing goodput tails. New config/output names separate
+these cases from old results. Old INIs are retained with `.ini.retired` suffixes;
+raw results and plots were not deleted. Plot only the new case folders/comparisons.
 
-For ideal full-capacity connection rates, each rib obeys `Spine + Rib_i <= 200`.
-Connection max–min therefore gives **100 Mbps each**. Connection proportional
-fairness gives **50 Mbps to the spine and 150 Mbps to each rib**. These are
-reference allocations, not predictions of Alpha/Delta, and ignore protocol
-overhead and OrbCC headroom. Aggregate application goodput can differ between
-allocations because a spine byte consumes three core links.
-
-The principal plot matches the source experiment: at each sampled time, compare
-spine goodput with the largest rib goodput using `min / max`, then average over
-the final quarter. It equals 1 at ideal max–min and 1/3 at ideal proportional
-fairness. The CSV also retains the directional `Spine / max(Ribs)` ratio, since
-the bounded ratio alone cannot distinguish a spine advantage from disadvantage.
-
-## Running
-
-From the OMNeT++ checkout root, run the full pipeline with ten workers:
+Run from the OMNeT++ root:
 
 ```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experiment7/runExperiment7.py --cores 10 --resume --skip-generate
+.venv/bin/python samples/mptcpExperiments/simulations/pythonScripts/experiment7/runExperiment7.py --resume
 ```
 
-To run just the five algorithms at 20/20 ms, retain five runs and add:
-
-```sh
---configs Alpha_Rtt20 Delta_Rtt20 CubicUncoupled_Rtt20 OrbUncoupled_Rtt20
-```
-
-The runner generates configurations unless `--skip-generate` is supplied. It
-reuses the experiment 5/6 pipeline for parallel simulations, export, extraction,
-and plotting, with barriers between stages. `--resume` requires successful
-completion markers matching inputs/libraries; a teardown crash is not completed.
-`--dry-run --skip-generate` lists commands without running OMNeT++.
-`--runs 1` is a single-repetition diagnostic. Defaults: five runs, three retries.
-
-Replot extracted CSVs:
-
-```sh
-python3 samples/mptcpExperiments/simulations/pythonScripts/experiment7/plotExperiment7.py
-```
-
-## Plots and recording
-
-Outputs go directly under `simulations/plots/experiment7`, with algorithm,
-RTT and run subdirectories. No bars, and no repetition-count labels on figures.
-
-- `goodput_ratio`: five-algorithm comparison versus RTT, mean ± sample SD of
-  the **per-run** ratios; ideal max–min and proportional references.
-- `goodput_by_rtt`: connection goodput versus RTT, with separate spine/rib panels.
-- Per case: `goodput_mean_variance`, mean ± SD and a sample-variance panel.
-- Per run: `goodput`, `throughput`, `cwnd`, `rtt`, `queueLength`, and `transport`
-  (unsent subflow send queues and receiver HoL). Cwnd/RTT/queue plots retain
-  recorded event times. Subflows are labelled by local connection ID; these IDs
-  are not assumed to identify the same lane at both endpoints.
-- All figures are PNG and PDF. CSVs: `run_summary.csv`, `summary.csv`,
-  `goodput_time_statistics.csv`, and `coverage.csv`.
-
-Only vectors used in these plots are enabled. Periodic goodput/throughput rates
-are uncompressed; state vectors remove repeated values. Missing rate intervals
-remain unknown. Summaries require at least 95% common final-window coverage
-across the four connections, excluding the final potentially unrecorded one-second
-timer interval from this check. The CSV reports coverage of the entire window;
-unrecorded tails are never extrapolated. SD is undefined for one run, rather than zero.
-
-Validation covers generated inputs, NED parsing/topology structure, dry-run
-commands, extraction, and synthetic plots. No simulation performance is claimed.
+Default simulations: 60. Wall-clock timeout: five hours per run.
+No simulation was run when installing this revision.

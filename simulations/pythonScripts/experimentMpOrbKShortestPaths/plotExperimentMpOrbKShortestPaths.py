@@ -75,7 +75,7 @@ def aggregate(rows, metric, ks):
 
 
 def batch_label(rows):
-    return {"MpOrbAlpha": "MpORB Alpha", "MpOrbUncoupled": "OrbCC uncoupled", "CubicUncoupled": "CUBIC uncoupled", "MpOrbDelta": "MpORB Delta", "MpOrbOmega": "MpORB Omega"}[rows[0]["protocol"]]
+    return {"MpOrbAlpha": "MpORB Alpha", "MpOrbUncoupled": "OrbCC uncoupled", "CubicUncoupled": "CUBIC uncoupled", "MpOrbSenderDelta": "Sender Delta", "MpOrbSemiCoupledTheta": "Theta", "MpOrbOmega": "MpORB Omega"}[rows[0]["protocol"]]
 
 
 def pair_labels():
@@ -206,7 +206,7 @@ def plot_results(configs, timeseries=True, cores=1):
         ("highest_rank_rtt_ms", "Propagation RTT of the highest selected rank, when available", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
         ("sender_rtt_ms", "Measured TCP RTT at the sender (ACK-sample mean)", "ms", [1, 2, 3, 4, 5], "RdYlGn_r", None),
     )
-    for batch in sorted({c["batch"] for c in configs}):
+    for batch in (b for b in ("alpha", "omega", "senderdelta", "theta", "uncoupled", "cubic") if b in {c["batch"] for c in configs}):
         batch_rows = [r for r in rows if r["batch"] == batch]
         if not batch_rows:
             continue
@@ -222,7 +222,7 @@ def plot_results(configs, timeseries=True, cores=1):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--batch", choices=("alpha", "delta", "omega", "uncoupled", "cubic", "all"), default="all")
+    parser.add_argument("--batch", choices=("alpha", "omega", "senderdelta", "theta", "uncoupled", "cubic", "all"), default="all")
     parser.add_argument("--no-timeseries", action="store_true")
     parser.add_argument("--cores", type=int, default=int(os.environ.get("EXPERIMENT_CORES", "2")))
     args = parser.parse_args()

@@ -17,6 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.colors import Normalize
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import legacy_protocols
 from plotHelpers import (
     HIGH_IS_GOOD_CMAP,
     LOW_IS_GOOD_CMAP,
@@ -43,11 +44,7 @@ QUEUE_MODULES = {
     "Path 2": "baliaresponsiveness.p2Ingress.ppp[0].queue",
 }
 
-PROTOCOLS = [('mporb_alpha', 'Alpha'),
- ('mporb_delta', 'Delta'),
- ('mporb_omega', 'Omega'),
- ('mporb', 'OrbCC uncoupled'),
- ('cubic', 'CUBIC uncoupled')]
+PROTOCOLS = [(k, v['description']) for k, v in legacy_protocols(short_alpha=True).items()]
 
 
 @dataclass

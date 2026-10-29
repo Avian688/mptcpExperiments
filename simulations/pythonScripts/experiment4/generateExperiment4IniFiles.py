@@ -80,11 +80,12 @@ def main():
         lines[1:1] = background_settings(settings)
         # Background connections use the same CC as A/B/C.
         # Preserve experiment 2's bottleneck PPP indices by appending access links.
+        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta'))
+        queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta') else "PintQueue"
         for path in range(8):
             gate = 2 if path < 4 else 1
-            lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "PintQueue"')
+            lines.append(f'**.router1[{path}].ppp[{gate}].queue.typename = "{queue_type}"')
 
-        lines += base.shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings['algorithm_class'] in ('MpOrbSemiCoupledDelta', 'MpOrbOmega'))
         lines += [
             f'**.tcp.typename = "{settings["tcp_type"]}"',
             f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"',

@@ -16,7 +16,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / 'experiment2'))
 from plotExperiment2 import (PROTOCOLS, USERS, USER_PATH_IDS, load_bundle, read_series, resample)
 from generateExperimentTestIniFiles import WAVES, PATH_MBPS
-PROTOCOLS = list(PROTOCOLS) + [("mporb_sender_delta", "Sender Delta")]
 
 PHASES = ((0, 20, 'Initial'), (20, 40, 'Load P5/P6'), (40, 60, 'Recovery 1'),
           (60, 80, 'Load P1/P2'), (80, 100, 'Recovery 2'))

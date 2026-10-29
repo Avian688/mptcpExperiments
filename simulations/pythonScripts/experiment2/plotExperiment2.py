@@ -18,6 +18,7 @@ from matplotlib.colors import Normalize
 from generateExperiment2IniFiles import MSS_BYTES, PATH_MBPS
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experimentProtocols import legacy_protocols
 from plotHelpers import (
     HIGH_IS_GOOD_CMAP,
     LOW_IS_GOOD_CMAP,
@@ -27,11 +28,7 @@ from plotHelpers import (
     target_closeness,
 )
 
-PROTOCOLS = [('mporb_semicoupled_alpha', 'Alpha'),
- ('mporb_semicoupled_delta', 'Delta'),
- ('mporb_omega', 'Omega'),
- ('mporb', 'OrbCC uncoupled'),
- ('cubic', 'CUBIC uncoupled')]
+PROTOCOLS = [(k, v['description']) for k, v in legacy_protocols(short_alpha=False).items()]
 USERS = [
     ("A", 0, "shared paths 1-4"),
     ("B", 1, "shared 1-2, private 5-6"),

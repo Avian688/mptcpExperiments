@@ -373,6 +373,12 @@ def main(number, *, configurations=None, generate_inputs=None,
          plot_script=None, extract_script=None) -> int:
     """Run the common pipeline; optional inputs support a different experiment matrix."""
     global CONFIGS, EXPERIMENT, EXPERIMENT_DIR, RESULTS_DIR, LOG_DIR, EXTRACT_SCRIPT
+    if number in (6, 7) and configurations is None:
+        from redistributionExperiments import configurations as redistribution_configs, generate as redistribution_generate
+        configurations = redistribution_configs(number)
+        generate_inputs = generate_inputs or redistribution_generate
+        plot_script = plot_script or SCRIPT_DIR / f'experiment{number}/plotExperiment{number}.py'
+        extract_script = extract_script or SCRIPT_DIR / f'experiment{number}/extractSingleCsvFile.py'
     EXPERIMENT = number
     EXPERIMENT_DIR = SIM_ROOT / 'experiments' / f'experiment{number}'
     RESULTS_DIR = EXPERIMENT_DIR / 'results'

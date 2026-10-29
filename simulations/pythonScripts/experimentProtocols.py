@@ -1,17 +1,33 @@
-"""Shared transport comparisons and explicit forward-bottleneck shuffle scope."""
-PROTOCOLS = {'Alpha': ('MpOrb', 'MpOrbSemiCoupledAlpha', 'MpORB Alpha'),
- 'Delta': ('MpOrb', 'MpOrbSemiCoupledDelta', 'MpORB Delta'),
- 'Omega': ('MpOrb', 'MpOrbOmega', 'MpORB Omega'),
- 'OrbUncoupled': ('MpOrb', 'MpOrbUncoupled', 'OrbCC uncoupled'),
- 'CubicUncoupled': ('MpTcp', 'MpTcpMetaCubic', 'CUBIC uncoupled')}
+"""Single source of truth for the six transport comparisons, in plot order."""
+PROTOCOLS = {
+    'Alpha': ('MpOrb', 'MpOrbSemiCoupledAlpha', 'Alpha'),
+    'Omega': ('MpOrb', 'MpOrbOmega', 'Omega'),
+    'SenderDelta': ('MpOrb', 'MpOrbSenderDelta', 'Sender Delta'),
+    'Theta': ('MpOrb', 'MpOrbSemiCoupledTheta', 'Theta'),
+    'OrbUncoupled': ('MpOrb', 'MpOrbUncoupled', 'OrbCC uncoupled'),
+    'CubicUncoupled': ('MpTcp', 'MpTcpMetaCubic', 'CUBIC uncoupled'),
+}
+SHUFFLE_PROTOCOLS = ('Omega', 'SenderDelta', 'Theta')
+SHUFFLE_CLASSES = tuple(PROTOCOLS[p][1] for p in SHUFFLE_PROTOCOLS)
+CC_LABELS = {p: v[2] for p, v in PROTOCOLS.items()}
+CC_COLORS = dict(zip(PROTOCOLS, ('#0072B2', '#E69F00', '#CC79A7', '#882255', '#009E73', '#D55E00')))
 
 
-def shuffle_settings(queues, delta):
-    # OMNeT++ uses the first matching assignment: specific gates before fallback.
-    lines = [f'{queue}.deltaShuffleFraction = 0.05' for queue in queues] if delta else []
-    return lines + ['**.ppp[*].queue.deltaShuffleFraction = 0',
-                    '**.ppp[*].queue.deltaShuffleInterval = 0s']
+def legacy_protocols(short_alpha=False):
+    """Keep existing filenames/config names for the older ABC runners."""
+    keys = ('mporb_alpha' if short_alpha else 'mporb_semicoupled_alpha',
+            'mporb_omega', 'mporb_sender_delta', 'mporb_semicoupled_theta', 'mporb', 'cubic')
+    result = {}
+    for key, (protocol, (tcp, algorithm, label)) in zip(keys, PROTOCOLS.items()):
+        config = ('MpOrbAlpha' if short_alpha else algorithm) if protocol == 'Alpha' else (
+            'CubicUncoupled' if protocol == 'CubicUncoupled' else algorithm)
+        result[key] = dict(config=config, tcp_type=tcp, algorithm_class=algorithm, description=label)
+    return result
 
-# Shared CC presentation order is the insertion order of PROTOCOLS above.
-CC_LABELS = dict(zip(PROTOCOLS, ('Alpha', 'Delta', 'Omega', 'OrbCC uncoupled', 'CUBIC uncoupled')))
-CC_COLORS = dict(zip(PROTOCOLS, ('#0072B2', '#CC79A7', '#E69F00', '#009E73', '#D55E00')))
+
+def shuffle_settings(queues, enabled):
+    if not enabled:
+        return []
+    return [f'{q}.deltaShuffleFraction = 0.05' for q in queues] + [
+        '**.ppp[*].queue.deltaShuffleFraction = 0',
+        '**.ppp[*].queue.deltaShuffleInterval = 0s']

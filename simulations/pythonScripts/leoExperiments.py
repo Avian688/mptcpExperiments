@@ -1,0 +1,261 @@
+"""LEO experiments 8/9/10: isolated, competing, and shortest-path background traffic."""
+import argparse
+import io
+import json
+import math
+import os
+import random
+import signal
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR / 'experimentMpOrbKShortestPaths'))
+import generateExperimentMpOrbKShortestPathsIni as catalog
+import runExperimentMpOrbKShortestPaths as runner
+from experimentProtocols import PROTOCOLS
+
+SIMULATIONS_DIR = SCRIPT_DIR.parent
+PAIRS = (
+    ('LondonToNewYork', 'London', 'New York', 0, 1),
+    ('SanDiegoToShanghai', 'San Diego', 'Shanghai', 2, 3),
+    ('SanDiegoToSeattle', 'San Diego', 'Seattle', 4, 5),
+)
+CONNECTION_COUNTS = {8: 1, 9: 2, 10: 7}
+PROTOCOL_ORDER = ('OrbUncoupled', 'Alpha', 'Omega', 'CubicUncoupled')
+BATCHES = dict(zip(PROTOCOL_ORDER, ('uncoupled', 'alpha', 'omega', 'cubic')))
+SNAPSHOT_SET = catalog.K_PATH_SNAPSHOT_SET
+ROUTE_STORE = '../experimentKShortestPaths/leoSaves'
+SIM_TIME = 300
+
+
+def terminal_pair(connection):
+    return 2 * connection, 2 * connection + 1
+
+
+def endpoint_pairs(experiment):
+    return [terminal_pair(connection) for connection in range(min(2, CONNECTION_COUNTS[experiment]))]
+
+
+def pair_specification(experiment):
+    return ','.join(f'userTerminal[{src}]->userTerminal[{dst}]' for src, dst in endpoint_pairs(experiment))
+
+
+def core_snapshot_profile():
+    """The original saved five-pair profile, independent of the traffic terminals."""
+    core_nodes = 1584 + len(catalog.CITY_COORDINATES) + len(catalog.load_ground_stations())
+    values = [len(catalog.PAIR_DEFINITIONS)]
+    for _, _, _, source, destination in catalog.PAIR_DEFINITIONS:
+        values.extend((core_nodes + source, core_nodes + destination))
+    hash_value = 1469598103934665603
+    for value in values:
+        for byte in value.to_bytes(4, 'little'):
+            hash_value = ((hash_value ^ byte) * 1099511628211) & ((1 << 64) - 1)
+    return (f'v3-edge-disjoint-mincost-k{catalog.PATH_COUNT}-rtt{catalog.MAX_RTT_SPREAD_MS}ms'
+            f'-pairs-{hash_value:016x}')
+
+
+def network_text(experiment):
+    # Keep the original core geometry, station IDs, capacities, and path policy.
+    output = io.StringIO()
+    catalog.write_network(output)
+    text = output.getvalue().replace('**.numOfUserTerminals = 10\n',
+                                    f'**.numOfUserTerminals = {2 * CONNECTION_COUNTS[experiment]}\n')
+    # Each traffic config supplies its city coordinates; core geometry is shared.
+    text = ''.join(line for line in text.splitlines(keepends=True) if not (
+        line.startswith('*.userTerminal[') and
+        ('.mobility.latitude = ' in line or '.mobility.longitude = ' in line)))
+    original_pairs = catalog.endpoint_pair_specification()
+    text = text.replace(f'kPathEndpointPairs = "{original_pairs}"',
+                        f'kPathEndpointPairs = "{pair_specification(experiment)}"')
+    text += f'*.configurator.kPathCoreSnapshotProfile = "{core_snapshot_profile()}"\n'
+    return text
+
+
+def configurations(experiment, sim_time=SIM_TIME):
+    if experiment not in (8, 9, 10) or not math.isfinite(sim_time) or sim_time < 20:
+        raise ValueError('Expected experiment 8, 9, or 10 and finite sim-time >= 20s')
+    configs = []
+    for protocol in PROTOCOL_ORDER:
+        for pair, source_city, destination_city, _, _ in PAIRS:
+            for k in range(1, 6):
+                for run in range(1, 6):
+                    seed = 4999 + run
+                    rng = random.Random(seed)
+                    starts = [round(rng.uniform(1, 2), 6) for _ in range(7)]
+                    connections = []
+                    for index in range(CONNECTION_COUNTS[experiment]):
+                        source, destination = terminal_pair(index)
+                        connections.append(dict(index=index, role='main' if index < 2 else 'background',
+                            source=source, destination=destination, start=starts[index],
+                            subflows=k if index < 2 else 1,
+                            path_group=index if index < 2 else None))
+                    configs.append(dict(config=f'{protocol}_{pair}_K{k}_Run{run}', experiment=experiment,
+                        protocol=protocol, batch=BATCHES[protocol], pair=pair, k=k, run=run, seed=seed,
+                        source_city=source_city, destination_city=destination_city,
+                        sim_time=sim_time, measurement_start=10, measurement_end=sim_time - 1,
+                        connections=connections))
+    return configs
+
+
+def experiment_directory(experiment):
+    return SIMULATIONS_DIR / 'experiments' / f'experiment{experiment}'
+
+
+def generate(experiment, sim_time=SIM_TIME):
+    configs = configurations(experiment, sim_time)
+    directory = experiment_directory(experiment)
+    directory.mkdir(parents=True, exist_ok=True)
+    with (directory / f'experiment{experiment}.ini').open('w') as output:
+        output.write(f'# Generated by leoExperiments.py\n[General]\nsim-time-limit = {sim_time:g}s\n'
+                     'record-eventlog = false\ncmdenv-express-mode = true\ncmdenv-event-banners = false\n'
+                     '**.cmdenv-log-level = off\n')
+        output.write(network_text(experiment))
+        catalog.write_transport(output)
+        for metric in ('U', 'txRate', 'queueingDelay', 'sharingFlows', 'omegaAdditionalIncrease',
+                       'mpOrbDeltaAppliedShuffle', 'mpOrbDeltaConnectionRate', 'mpOrbDeltaSubflowRate'):
+            output.write(f'**.{metric}.statistic-recording = true\n'
+                         f'**.{metric}.result-recording-modes = vector(removeRepeats)\n'
+                         f'**.{metric}:vector(removeRepeats).vector-recording = true\n')
+        # Application byte counters are kept separately for every terminal pair.
+        catalog.write_recording(output)
+        for config in configs:
+            output.write(f'\n[Config {config["config"]}]\nseed-set = {config["seed"]}\n')
+            for kind in ('vector', 'scalar'):
+                extension = 'vec' if kind == 'vector' else 'sca'
+                output.write(f'output-{kind}-file = "results/{config["config"]}-#0.{extension}"\n')
+            transport, algorithm, _ = PROTOCOLS[config['protocol']]
+            output.write(f'**.tcp.typename = "{transport}"\n**.tcp.tcpAlgorithmClass = "{algorithm}"\n')
+            queue = 'MpOrbDeltaQueue' if config['protocol'] == 'Omega' else 'PintQueue'
+            output.write(f'**.ppp[*].queue.typename = "{queue}"\n')
+            if config['protocol'] == 'Omega':
+                output.write('**.ppp[*].queue.deltaShuffleFraction = 0.05\n'
+                             '**.ppp[*].queue.deltaShuffleInterval = 0s\n')
+            groups = ' '.join(str(c['path_group']) for c in config['connections'] if c['role'] == 'main')
+            output.write(f'**.ipv4.ip.kPathTcpPathGroups = "{groups}"\n'
+                         f'**.ipv4.ip.kPathTcpSubflows = {config["k"]}\n')
+            for connection in config['connections']:
+                source, destination = connection['source'], connection['destination']
+                count = connection['subflows']
+                monitors = count if connection['role'] == 'main' else 0
+                for terminal, city in ((source, config['source_city']), (destination, config['destination_city'])):
+                    lat, lon = catalog.CITY_COORDINATES[city]
+                    output.write(f'*.userTerminal[{terminal}].mobility.latitude = {lat}\n'
+                                 f'*.userTerminal[{terminal}].mobility.longitude = {lon}\n')
+                for terminal in (source, destination):
+                    output.write(f'*.userTerminal[{terminal}].**.numberOfSubflows = {count}\n')
+                output.write(f'*.userTerminal[{source}].numApps = {1 + monitors}\n'
+                             f'*.userTerminal[{destination}].numApps = 1\n')
+                sender = f'*.userTerminal[{source}].app[0]'
+                receiver = f'*.userTerminal[{destination}].app[0]'
+                start = connection['start']
+                output.write(f'{sender}.typename = "MpTcpSessionApp"\n{sender}.localPort = 4000\n'
+                             f'{sender}.connectPort = 1000\n{sender}.connectAddress = "userTerminal[{destination}]"\n'
+                             f'{sender}.tOpen = {start}s\n{sender}.tSend = {start}s\n'
+                             f'{sender}.tClose = {sim_time + 1:g}s\n{sender}.sendBytes = 1MiB\n'
+                             f'{sender}.dataTransferMode = "bytecount"\n'
+                             f'{receiver}.typename = "MpTcpSinkApp"\n{receiver}.localPort = 1000\n'
+                             f'{receiver}.serverThreadModuleType = "tcpgoodputapplications.applications.tcpapp.TcpGoodputSinkAppThread"\n')
+                for rank in range(1, monitors + 1):
+                    app = f'*.userTerminal[{source}].app[{rank}]'
+                    output.write(f'{app}.typename = "KShortestPathPingApp"\n'
+                                 f'{app}.destAddr = "userTerminal[{destination}]"\n'
+                                 f'{app}.pathGroup = {connection["path_group"]}\n{app}.pathIndex = {rank}\n'
+                                 f'{app}.monitorOnly = true\n{app}.count = -1\n'
+                                 f'{app}.startTime = 0.000002s\n{app}.stopTime = {sim_time:g}s\n'
+                                 f'{app}.sendInterval = 100ms\n{app}.printPing = false\n')
+            output.write('*.userTerminal[*].numApps = 0\n')
+    (directory / 'matrix.json').write_text(json.dumps(configs, indent=2) + '\n')
+    print(f'Experiment {experiment}: generated {len(configs)} configurations')
+    return configs
+
+
+def configure_runner(experiment):
+    """Reuse the established simulator/export/resume code for one suite per process."""
+    directory = experiment_directory(experiment)
+    runner.EXPERIMENT_DIR = directory
+    runner.INI_FILE = directory / f'experiment{experiment}.ini'
+    runner.RESULTS_DIR = directory / 'results'
+    runner.CSV_DIR = directory / 'csvs'
+    runner.LOG_DIR = SIMULATIONS_DIR / 'logs' / f'experiment{experiment}'
+    runner.K_PATH_SNAPSHOT_SET = SNAPSHOT_SET
+    # Preflight/fingerprints use the original corpus, not the current terminals.
+    runner.PAIR_DEFINITIONS = catalog.PAIR_DEFINITIONS
+    return runner
+
+
+def main(experiment):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--start-step', type=int, choices=range(1, 5), default=1)
+    parser.add_argument('--end-step', type=int, choices=range(1, 5), default=4)
+    parser.add_argument('--sim-time', type=float, default=SIM_TIME)
+    parser.add_argument('--cores', type=int, default=int(os.environ.get('EXPERIMENT_CORES', '2')))
+    parser.add_argument('--retries', type=int, default=1)
+    parser.add_argument('--sim-timeout-seconds', type=float, default=5 * 3600)
+    parser.add_argument('--protocols', nargs='+', choices=PROTOCOL_ORDER, default=list(PROTOCOL_ORDER))
+    parser.add_argument('--runs', nargs='+', type=int, choices=range(1, 6))
+    parser.add_argument('--configs', nargs='+')
+    parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--check-routes', action='store_true')
+    parser.add_argument('--skip-generate', action='store_true')
+    parser.add_argument('--rerun', action='store_true')
+    parser.add_argument('--keep-completed', action='store_true')
+    args = parser.parse_args()
+    if (args.cores < 1 or args.retries < 0 or args.start_step > args.end_step or
+            not math.isfinite(args.sim_timeout_seconds) or args.sim_timeout_seconds <= 0 or
+            (args.rerun and args.keep_completed)):
+        parser.error('Invalid worker/step/timeout/retry settings or conflicting resume flags')
+    backend = configure_runner(experiment)
+    configs = generate(experiment, args.sim_time) if args.start_step == 1 and not args.skip_generate else json.loads(
+        (experiment_directory(experiment) / 'matrix.json').read_text())
+    configs = [c for c in configs if c['protocol'] in args.protocols]
+    if args.configs:
+        unknown = set(args.configs) - {c['config'] for c in configs}
+        if unknown:
+            raise ValueError(f'Unknown configurations: {sorted(unknown)}')
+        configs = [c for c in configs if c['config'] in args.configs]
+    if args.runs:
+        configs = [c for c in configs if c['run'] in args.runs]
+    if not configs:
+        raise ValueError('No selected configurations')
+    print(f'Selected {len(configs)} runs')
+    if args.check_routes:
+        backend.check_routes(max(c['sim_time'] for c in configs))
+        return
+    if args.dry_run:
+        for config in configs:
+            print(config['config'])
+        return
+    if args.end_step >= 3:
+        import numpy  # fail before simulating if analysis dependencies are unavailable
+    if args.end_step >= 4:
+        import matplotlib
+    if args.start_step <= 1 <= args.end_step:
+        backend.run_simulations(configs, args)
+    if args.start_step <= 2 <= args.end_step:
+        backend.export_results(configs, args.cores)
+    if args.start_step <= 3 <= args.end_step:
+        for config in configs:
+            completed = backend.read_completion(config)
+            raw = backend.CSV_DIR / 'raw' / f'{config["config"]}.csv'
+            if completed is None or not raw.is_file() or raw.stat().st_mtime_ns < max(
+                    stat[1] for stat in completed['outputs'].values()):
+                raise RuntimeError(f'{config["config"]}: missing or stale export; run step 2 first')
+        from leoResults import extract_results
+        extract_results(configs, args.cores)
+    if args.start_step <= 4 <= args.end_step:
+        from leoResults import plot_results
+        plot_results(configs, args.cores)
+
+
+def run(experiment):
+    def interrupted(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    try:
+        main(experiment)
+    except KeyboardInterrupt:
+        raise SystemExit(130)
+    except (OSError, ValueError, RuntimeError) as error:
+        print(error, file=sys.stderr)
+        raise SystemExit(1)
