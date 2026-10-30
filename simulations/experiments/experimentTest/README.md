@@ -18,7 +18,7 @@ uncoupled OrbCC, uncoupled CUBIC, switch-side Delta, sender-side Delta and Omega
 `defaultCwnd`. Delta measurements/shuffling are enabled only at the eight
 forward bottlenecks. Other experiments and their protocol matrices are unchanged.
 
-From the simulations directory, run/export/extract/plot all 30 runs:
+From the simulations directory, run/export/extract/plot all 25 runs:
 
 ```sh
 python3 pythonScripts/experimentTest/runExperimentTest.py --cores 10
@@ -27,7 +27,7 @@ python3 pythonScripts/experimentTest/runExperimentTest.py --cores 10
 For just the new sender-side Delta (five runs):
 
 ```sh
-python3 pythonScripts/experimentTest/runExperimentTest.py --cores 10 --configs MpOrbSenderDelta
+python3 pythonScripts/experimentTest/runExperimentTest.py --cores 10 --configs MpOrbDelta
 ```
 
 Runner timeout remains five hours per simulation. Results, logs and plots use

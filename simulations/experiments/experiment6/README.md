@@ -11,7 +11,7 @@ connection max-min rates are 100 Mbps each initially and 80 Mbps for all five
 connections during competition. One feasible allocation in that phase is
 A=(20,60), B=(40,40), C=(60,20), D=80, background=80 Mbps.
 
-All participants use the selected CC: Alpha, Omega, Sender Delta, Theta,
+All participants use the selected CC: Alpha, Delta, Omega,
 OrbCC uncoupled, CUBIC uncoupled (also plot order). Five paired seeds; 20 ms
 propagation RTT; 10 Gbps access legs; 173-packet core queues (one BDP at MSS 1448).
 `defaultCwnd` throughout. Only forward core bottlenecks participate in shuffle;

@@ -18,7 +18,7 @@ from experimentProtocols import CC_LABELS, CC_COLORS
 COLORS = ('#2878b5', '#e47722', '#31945b')
 STEP = 0.5
 STYLES = {'Alpha': ('o', '-'), 'OrbUncoupled': ('s', '--'),
-          'CubicUncoupled': ('^', '-.'), 'SenderDelta': ('D', ':'), 'Theta': ('X', '--'), 'Omega': ('P', '-')}
+          'CubicUncoupled': ('^', '-.'), 'Delta': ('X', '--'), 'Omega': ('P', '-')}
 
 
 def read(path, metric):
@@ -113,9 +113,9 @@ def dashboard(root, number, title, run, grid, goodput, output, protocol='Alpha')
     for ax, metric, scale, label in (
             (axes[2], 'cwnd', 1024, 'Cwnd (KiB)'),
             (axes[3], 'subflowSendQueueBytes', 1024, 'Unsent send queue (KiB)'),
-            (axes[5], 'semiCoupledAlphaRateShare' if protocol in ('Alpha', 'Omega', 'SenderDelta', 'Theta') else 'mbytesInFlight',
-             1 if protocol in ('Alpha', 'Omega', 'SenderDelta', 'Theta') else 1024,
-             'Alpha AI weight' if protocol in ('Alpha', 'Omega', 'SenderDelta', 'Theta') else 'Bytes in flight (KiB)')):
+            (axes[5], 'semiCoupledAlphaRateShare' if protocol in ('Alpha', 'Delta', 'Omega') else 'mbytesInFlight',
+             1 if protocol in ('Alpha', 'Delta', 'Omega') else 1024,
+             'Alpha AI weight' if protocol in ('Alpha', 'Delta', 'Omega') else 'Bytes in flight (KiB)')):
         for i, name in enumerate('ABC'):
             for route, folder in zip(USER_PATHS[number][i], subflows(root, f'client[{i}]')):
                 p = folder / f'{metric}.csv'

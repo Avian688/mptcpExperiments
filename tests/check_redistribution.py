@@ -82,7 +82,7 @@ class Redistribution(unittest.TestCase):
     def test_full_synthetic_plot_pipeline(self):
         for n,case in ((6,'Chain'),(7,'LaneShift')):
             with tempfile.TemporaryDirectory() as temp:
-                base=Path(temp);root=base/'csvs'/'Theta'/case.lower()/'run1'
+                base=Path(temp);root=base/'csvs'/'Delta'/case.lower()/'run1'
                 times=np.arange(.5,150.5,.5)
                 def write(module,metric,t,v):
                     d=root/f'redistribution.{module}';d.mkdir(parents=True,exist_ok=True)
@@ -95,9 +95,9 @@ class Redistribution(unittest.TestCase):
                             write(f'client[{i}].tcp.conn-{10+j}',metric,[0,150],[value,value])
                     write(f'server[{i}].tcp.conn-1','holBlockedBytes',[0,150],[0,0])
                 for interface,_ in spec.forward_interfaces(n):write(interface+'.ppp','transmissionState',[0,1,149],[0,1,0])
-                args=['plot','--configs',f'Theta_{case}','--runs','1','--csv-root',str(base/'csvs'),'--out-dir',str(base/'plots')]
+                args=['plot','--configs',f'Delta_{case}','--runs','1','--csv-root',str(base/'csvs'),'--out-dir',str(base/'plots')]
                 with patch.object(sys,'argv',args):self.assertEqual(plots.main(n),0)
-                output=base/'plots'/'Theta'/case.lower()/'run1'
+                output=base/'plots'/'Delta'/case.lower()/'run1'
                 for name in ('goodput','subflow_rates','link_utilisation','cwnd','U','holBlockedBytes'):
                     self.assertGreater((output/f'{name}.png').stat().st_size,1000)
                 frame=pd.read_csv(base/'plots/phase_summary.csv')

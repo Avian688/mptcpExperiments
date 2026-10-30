@@ -1,22 +1,21 @@
-"""Single source of truth for the six transport comparisons, in plot order."""
+"""Single source of truth for the five transport comparisons, in plot order."""
 PROTOCOLS = {
     'Alpha': ('MpOrb', 'MpOrbSemiCoupledAlpha', 'Alpha'),
+    'Delta': ('MpOrb', 'MpOrbDelta', 'Delta'),
     'Omega': ('MpOrb', 'MpOrbOmega', 'Omega'),
-    'SenderDelta': ('MpOrb', 'MpOrbSenderDelta', 'Sender Delta'),
-    'Theta': ('MpOrb', 'MpOrbSemiCoupledTheta', 'Theta'),
     'OrbUncoupled': ('MpOrb', 'MpOrbUncoupled', 'OrbCC uncoupled'),
     'CubicUncoupled': ('MpTcp', 'MpTcpMetaCubic', 'CUBIC uncoupled'),
 }
-SHUFFLE_PROTOCOLS = ('Omega', 'SenderDelta', 'Theta')
+SHUFFLE_PROTOCOLS = ('Delta', 'Omega')
 SHUFFLE_CLASSES = tuple(PROTOCOLS[p][1] for p in SHUFFLE_PROTOCOLS)
 CC_LABELS = {p: v[2] for p, v in PROTOCOLS.items()}
-CC_COLORS = dict(zip(PROTOCOLS, ('#0072B2', '#E69F00', '#CC79A7', '#882255', '#009E73', '#D55E00')))
+CC_COLORS = dict(zip(PROTOCOLS, ('#0072B2', '#882255', '#E69F00', '#009E73', '#D55E00')))
 
 
 def legacy_protocols(short_alpha=False):
     """Keep existing filenames/config names for the older ABC runners."""
     keys = ('mporb_alpha' if short_alpha else 'mporb_semicoupled_alpha',
-            'mporb_omega', 'mporb_sender_delta', 'mporb_semicoupled_theta', 'mporb', 'cubic')
+            'mporb_delta', 'mporb_omega', 'mporb', 'cubic')
     result = {}
     for key, (protocol, (tcp, algorithm, label)) in zip(keys, PROTOCOLS.items()):
         config = ('MpOrbAlpha' if short_alpha else algorithm) if protocol == 'Alpha' else (

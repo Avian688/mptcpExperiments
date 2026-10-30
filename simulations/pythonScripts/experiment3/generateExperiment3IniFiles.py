@@ -231,8 +231,8 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'*.backgroundClient[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     write(f'*.backgroundServer[*].tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
-    queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta') else "PintQueue"
-    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta')):
+    queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbDelta', 'MpOrbOmega') else "PintQueue"
+    for line in shuffle_settings(['**.p1Ingress.ppp[0].queue', '**.p2Ingress.ppp[0].queue'], settings["algorithm_class"] in ('MpOrbDelta', 'MpOrbOmega')):
         write(line)
     if is_mporb:
         write("# Specific PintQueue assignments must precede the broad fallback.")

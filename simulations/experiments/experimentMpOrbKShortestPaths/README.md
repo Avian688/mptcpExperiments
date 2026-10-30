@@ -1,21 +1,19 @@
-> Current transport matrix: `alpha`, `uncoupled`, `cubic`, `delta` batches,
-> 125 simulations each (500 total), all using defaultCwnd. `--batch all` selects
-> all four. Delta uses 5% shuffle at physical 100 Mbps egress queues, including
-> potentially limiting access links; this LEO topology has no 10 Gbps access tier.
-> The route/ping experiment is unchanged.
+# Five congestion controls on saved edge-disjoint LEO paths
 
-# Four congestion controls on saved edge-disjoint LEO paths
-
-Four separate batches, each with 125 simulations: five city pairs × K=1–5 × five seeds.
-There are 500 simulations when all batches are selected. Only the
-**EdgeDisjoint** policy is included; shared-link policies are deferred.
+Batches run in this order: Alpha, Delta, Omega, OrbCC uncoupled, CUBIC uncoupled.
+Each has 125 simulations: five city pairs × K=1–5 × five seeds (625 total).
+All use defaultCwnd and the saved EdgeDisjoint policy. Delta/Omega measure
+fairness at physical 100 Mbps egress queues, including potentially limiting
+access links; this LEO topology has no 10 Gbps access tier. Only the chosen
+highest-U bottleneck supplies fairness feedback. The route/ping suite is unchanged.
 
 | Batch | Transport and algorithm | Subflows |
 |---|---|---|
-| `alpha` | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1, 2, 3, 4, 5 |
-| `uncoupled` | `MpOrb` / `MpOrbUncoupled` | 1, 2, 3, 4, 5 |
-| `cubic` | `MpTcp` / `MpTcpMetaCubic` | 1, 2, 3, 4, 5 |
-| `delta` | `MpOrb` / `MpOrbSemiCoupledDelta` | 1, 2, 3, 4, 5 |
+| `alpha` | `MpOrb` / `MpOrbSemiCoupledAlpha` | 1–5 |
+| `delta` | `MpOrb` / `MpOrbDelta` | 1–5 |
+| `omega` | `MpOrb` / `MpOrbOmega` | 1–5 |
+| `uncoupled` | `MpOrb` / `MpOrbUncoupled` | 1–5 |
+| `cubic` | `MpTcp` / `MpTcpMetaCubic` | 1–5 |
 
 K=1 uses the selected multipath transport with one subflow and the batch's own algorithm.
 There is no separate OrbCC baseline in this matrix. Each batch's gain heatmap
@@ -96,7 +94,7 @@ The common access links can limit aggregate goodput even with disjoint core link
 This is a route-count/resilience comparison without added background competition,
 not a test with K independent 100 Mbps end-to-end bottlenecks.
 
-All cases use `PintInterface`/`PintQueue`, eight-bit utilization and flow
+All cases use `PintInterface` and base PINT telemetry (`MpOrbDeltaQueue` for Delta/Omega), eight-bit utilization and flow
 counts, the flow-count sketch, full ACK feedback, initial phase enabled, and the
 same OrbCC gains. Alpha itself is unchanged. MSS is 1200 bytes on both transports
 to leave room for TCP/PINT/MPTCP options. Fragmented TCP packets for the selected
@@ -113,7 +111,7 @@ your default `python3` does not have them. Analysis dependencies are checked bef
 the runner starts a pipeline that includes extraction or plotting.
 
 ```sh
-# Generate and inspect all 250 configurations; no simulations.
+# Generate and inspect all 625 configurations; no simulations.
 python3 runExperimentMpOrbKShortestPaths.py --dry-run
 
 # Check both primary and edge-disjoint saved snapshot coverage; no simulations.
@@ -122,7 +120,7 @@ python3 runExperimentMpOrbKShortestPaths.py --check-routes
 # If the saved corpus is absent, generate only the required policy first.
 python3 ../experimentKShortestPaths/runExperimentKShortestPathsSaveFiles.py --policies EdgeDisjoint --sim-time 300 --cores 1
 
-# Full experiment: both algorithms, K=1..5, five pairs, five seeds (250 runs).
+# Full experiment: five algorithms, K=1..5, five pairs, five seeds (625 runs).
 python3 runExperimentMpOrbKShortestPaths.py --cores 10
 
 # Alpha batch only (125 runs).
@@ -131,7 +129,7 @@ python3 runExperimentMpOrbKShortestPaths.py --batch alpha --cores 10
 # Independent Uncoupled batch: the same 125 settings.
 python3 runExperimentMpOrbKShortestPaths.py --batch uncoupled --cores 10
 
-# Small first batch: two protocols × five pairs × five treatments × one seed = 50 runs.
+# Small first batch: five protocols × five pairs × five treatments × one seed = 125 runs.
 python3 runExperimentMpOrbKShortestPaths.py --runs 1 --cores 2
 
 # One configuration for initial runtime validation.
@@ -146,10 +144,10 @@ python3 plotExperimentMpOrbKShortestPaths.py
 
 Steps are 1=simulate, 2=export, 3=extract, 4=plot; use `--start-step` and
 `--end-step` to limit work. `--runs` selects seeds and `--configs` selects exact
-configuration names. Both batches run by default (`--batch all`). Use
+configuration names. All batches run by default (`--batch all`). Use
 `--batch alpha` or `--batch uncoupled` to restrict the experiment to one algorithm. Use the same batch selector when
 resuming later steps or running the standalone extractor/plotter. The generator
-always writes the complete 250-entry matrix; batch selection filters execution.
+always writes the complete 625-entry matrix; batch selection filters execution.
 Plots and batch summary CSVs are separate, so processing one cannot overwrite
 the other. Old root-level OrbCC comparison plots remain legacy outputs.
 The new batch metadata invalidates older completion markers and extracted

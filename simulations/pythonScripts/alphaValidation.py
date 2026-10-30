@@ -132,8 +132,8 @@ def general(number, protocol='Alpha'):
     elif number == 5:
         queues = ['left.ppp[0]', 'middle.ppp[1]', 'privateIngress.ppp[0]']
         lines += ['*.privateIngress.ppp[0].queue.packetCapacity = 35']
-    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol in ('Omega', 'SenderDelta', 'Theta'))
-    queue_type = "MpOrbDeltaQueue" if protocol in ("Omega", "SenderDelta", "Theta") else "PintQueue"
+    lines += shuffle_settings([f'*.{queue}.queue' for queue in queues], protocol in ('Delta', 'Omega'))
+    queue_type = "MpOrbDeltaQueue" if protocol in ("Delta", "Omega") else "PintQueue"
     for queue in queues:
         lines += [f'*.{queue}.queue.typename = "{queue_type}"']
     lines += [

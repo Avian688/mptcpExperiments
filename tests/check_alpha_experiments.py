@@ -42,7 +42,7 @@ class AlphaExperiments(unittest.TestCase):
                 folder = run_root/module
                 folder.mkdir(parents=True, exist_ok=True)
                 pd.DataFrame({'time': times, metric: value}).to_csv(folder/f'{metric}.csv', index=False)
-            for protocol in ('mporb_semicoupled_alpha', 'mporb_sender_delta'):
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_delta'):
                 run_root = inputs/protocol/'run1'
                 for i in range(3):
                     write(run_root, f'sharedleopaths.server[{i}].app[0]', 'goodput', 200e6)
@@ -65,33 +65,33 @@ class AlphaExperiments(unittest.TestCase):
             self.assertTrue(sentinel.exists())
             for name in ('phase_goodput.png', 'phase_goodput.pdf', 'phase_runs.csv', 'phase_summary.csv'):
                 self.assertGreater((output/name).stat().st_size, 0)
-            for protocol in ('mporb_semicoupled_alpha', 'mporb_sender_delta'):
+            for protocol in ('mporb_semicoupled_alpha', 'mporb_delta'):
                 self.assertTrue((output/'individual'/protocol/'run1'/'response.png').is_file())
 
-    def test_six_protocol_matrix_and_separate_outputs(self):
+    def test_five_protocol_matrix_and_separate_outputs(self):
         from experimentProtocols import PROTOCOLS
         definitions = spec.cases(5)
-        self.assertEqual(len(definitions), 6)
-        self.assertEqual(len({slug for _,slug,_ in definitions}), 6)
+        self.assertEqual(len(definitions), 5)
+        self.assertEqual(len({slug for _,slug,_ in definitions}), 5)
         for protocol, (_,algorithm,_) in PROTOCOLS.items():
             ini=parse_ini(ROOT/f'simulations/experiments/experiment5/experiment5_mporb_{protocol.lower()}.ini')
             self.assertEqual(ini['General']['**.tcp.tcpAlgorithmClass'], f'"{algorithm}"')
             self.assertEqual(ini['General']['**.vector-recording'], 'false')
 
-    def test_runner_defaults_include_six_protocols_without_launching(self):
+    def test_runner_defaults_include_five_protocols_without_launching(self):
         from experimentProtocols import PROTOCOLS
-        for number, count in ((5,30),(6,30),(7,60)):
+        for number, count in ((5,25),(6,25),(7,50)):
             with patch.object(sys,'argv',['runner','--skip-generate','--dry-run']), patch.object(runner,'run_parallel') as launch, patch('builtins.print'):
                 self.assertEqual(runner.main(number),0)
             launch.assert_not_called()
             self.assertEqual(len(runner.CONFIGS)*5,count)
             self.assertEqual({entry[0].split('_')[0] for entry in runner.CONFIGS},set(PROTOCOLS))
 
-    def test_comparison_keeps_alpha_and_sender_delta_measurements_separate(self):
+    def test_comparison_keeps_alpha_and_delta_measurements_separate(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             times = np.arange(.5, 300.5, .5)
-            for slug, value in (('fairness', 60.), ('senderdelta_fairness', 40.)):
+            for slug, value in (('fairness', 60.), ('delta_fairness', 40.)):
                 for run in (1, 2):
                     for i in range(3):
                         folder = root / 'csvs' / slug / f'run{run}' / f'fairnessPaths.server[{i}].app[0]'
@@ -108,9 +108,9 @@ class AlphaExperiments(unittest.TestCase):
                     patch.object(plots, 'dashboard'), patch.object(plots, 'save', side_effect=capture):
                 self.assertEqual(plots.main(5), 0)
             results = pd.read_csv(root/'plots/phase_runs.csv')
-            self.assertEqual(set(results.protocol), {'Alpha', 'SenderDelta'})
+            self.assertEqual(set(results.protocol), {'Alpha', 'Delta'})
             self.assertEqual(results[results.protocol == 'Alpha'].A_final20s_mbps.mean(), 60.)
-            self.assertEqual(results[results.protocol == 'SenderDelta'].A_final20s_mbps.mean(), 40.)
+            self.assertEqual(results[results.protocol == 'Delta'].A_final20s_mbps.mean(), 40.)
             self.assertTrue((root/'plots/allocation_comparison.png').exists())
 
     def test_matrix_and_background_scope(self):
@@ -141,7 +141,7 @@ class AlphaExperiments(unittest.TestCase):
         self.assertEqual({p.attrib['module'] for p in event}, {f'client[{i}].tcp' for i in range(3, 7)})
 
     def test_chain_replaces_arrival_order_cases(self):
-        self.assertEqual(len(spec.cases(6)),6)
+        self.assertEqual(len(spec.cases(6)),5)
         self.assertTrue(all(prefix.endswith('_Chain') for prefix,_,_ in spec.cases(6)))
 
     def test_reference_allocations_are_feasible(self):

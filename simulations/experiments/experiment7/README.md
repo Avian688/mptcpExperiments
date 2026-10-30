@@ -18,7 +18,7 @@ each. During either wave, the five backgrounds can receive 20 Mbps each; spine
 and middle rib receive 50 Mbps each on the other middle link, and the outer ribs
 receive 150 Mbps each. These are topology references, not CC predictions.
 
-All participants use the selected CC: Alpha, Omega, Sender Delta, Theta,
+All participants use the selected CC: Alpha, Delta, Omega,
 OrbCC uncoupled, CUBIC uncoupled (also plot order). Five paired seeds; 20 ms
 propagation RTT; 10 Gbps access legs; 173-packet core queues (one BDP at MSS 1448).
 `defaultCwnd` throughout. Only forward core bottlenecks participate in shuffle;

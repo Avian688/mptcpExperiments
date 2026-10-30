@@ -1,19 +1,20 @@
 # MPTCP / MpORB experiments
 
-Experiments 1–7 and the existing named transport suites use: **Alpha, Omega, Sender Delta, Theta,
+Experiments 1–7 and the existing named transport suites use: **Alpha, Delta, Omega,
 OrbCC uncoupled, CUBIC uncoupled**, in that order. All participants, including
 single-path backgrounds, use the selected CC. Five paired seeds per case.
-Numbered experiments use defaultCwnd. No CC implementation changed here.
+Numbered experiments use defaultCwnd. Delta is the consolidated sender-side
+controller; Omega adds the underutilisation boost on top of it.
 
 | Experiment | Setup and aim | Runs |
 | --- | --- | ---: |
-| 1 | Two busy paths, competition and recovery; RTT (20, 20–200) ms. | 300 |
-| 2 | Static ABC shared/private alternatives. | 30 |
-| 3 | Two paths with temporary competition on one. | 30 |
-| 4 | ABC with two temporary background waves. | 30 |
-| 5 | Serial shared links plus a private 20 Mbps route; distinguishes fairness objectives. | 30 |
-| 6 | A=(L1,L2), B=(L2,L3), C=(L3,L4), D=L4; L1 background tests a redistribution chain. | 30 |
-| 7 | Symmetric parking-lot control and lane-local background waves; tests multipath movement across multi-bottleneck paths. | 60 |
+| 1 | Two busy paths, competition and recovery; RTT (20, 20–200) ms. | 250 |
+| 2 | Static ABC shared/private alternatives. | 25 |
+| 3 | Two paths with temporary competition on one. | 25 |
+| 4 | ABC with two temporary background waves. | 25 |
+| 5 | Serial shared links plus a private 20 Mbps route; distinguishes fairness objectives. | 25 |
+| 6 | A=(L1,L2), B=(L2,L3), C=(L3,L4), D=L4; L1 background tests a redistribution chain. | 25 |
+| 7 | Symmetric parking-lot control and lane-local background waves; tests multipath movement across multi-bottleneck paths. | 50 |
 | 8 | One LEO connection, three city pairs, requested K=1–5. | 300 |
 | 9 | Two LEO connections on separate colocated terminal pairs, equal requested K. | 300 |
 | 10 | Experiment 9 plus five one-subflow shortest-path backgrounds. | 300 |
@@ -24,7 +25,7 @@ K paths, missing-path treatment, and validation limits.
 
 See experiment6/README.md and experiment7/README.md for new topologies, timings,
 references and diagnostics. Both use 100 Mbps bottlenecks and 20 ms RTTs.
-Sender Delta, Omega and Theta measure shuffle only at explicit forward
+Delta and Omega measure shuffle only at explicit forward
 bottlenecks. Their feedback is accepted only for the chosen highest-U bottleneck.
 The 5% coefficient is not a hard sender-side interval budget. Other queue
 settings and CC implementations retain their existing behaviour.
@@ -35,18 +36,18 @@ Run from `/Users/av288/omnetpp-6.4.0`:
 for n in 4 5 6 7; do .venv/bin/python samples/mptcpExperiments/simulations/pythonScripts/experiment${n}/runExperiment${n}.py --resume || break; done
 ```
 
-150 simulations across experiments 4–7. `--cores` controls concurrency; omission
+125 simulations across experiments 4–7. `--cores` controls concurrency; omission
 uses the machine CPU limit and the extraction RAM budget. `--skip-generate`
 keeps existing INI edits; omit it to use current generators. Timeout is five
 hours per simulation. New 6/7 case names avoid reusing obsolete extracted data.
-Retired variants remain recoverable as `.ini.retired`, not active inputs.
+Retired variant source and INIs have been removed; old results are not relabelled.
 Existing results and plots are preserved, but only selected protocols/cases
 enter new comparisons.
 
 The named Test, Scheduler and MpOrbKShortestPaths experiments also use these
-six algorithms. Scheduler retains its scheduler/RTT comparisons (CUBIC excludes
-intInformed); Test retains its 20 Mbps ABC setup. MpOrbKShortestPaths has six
-batches (`alpha`, `omega`, `senderdelta`, `theta`, `uncoupled`, `cubic`): 750 runs.
+five algorithms. Scheduler retains its scheduler/RTT comparisons (CUBIC excludes
+intInformed); Test retains its 20 Mbps ABC setup. MpOrbKShortestPaths has five
+batches (`alpha`, `delta`, `omega`, `uncoupled`, `cubic`): 625 runs.
 The routing-only experimentKShortestPaths uses ping and has no transport matrix.
 
 Validation covers generated matrices, NED syntax, config selection and synthetic

@@ -178,8 +178,8 @@ def write_protocol_settings(write, protocol: str, settings: dict[str, str]) -> N
     write(f'**.tcp.typename = "{settings["tcp_type"]}"')
     write(f'**.tcp.tcpAlgorithmClass = "{settings["algorithm_class"]}"')
     is_mporb = settings["tcp_type"] == "MpOrb"
-    queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta') else "PintQueue"
-    for line in shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings["algorithm_class"] in ('MpOrbSenderDelta', 'MpOrbOmega', 'MpOrbSemiCoupledTheta')):
+    queue_type = "MpOrbDeltaQueue" if settings["algorithm_class"] in ('MpOrbDelta', 'MpOrbOmega') else "PintQueue"
+    for line in shuffle_settings([f'**.router1[{i}].ppp[{2 if i < 4 else 1}].queue' for i in range(8)], settings["algorithm_class"] in ('MpOrbDelta', 'MpOrbOmega')):
         write(line)
     if is_mporb:
         write("# MPORB requires PINT telemetry on every forward bottleneck.")
